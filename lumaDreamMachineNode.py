@@ -1,65 +1,454 @@
-# import configparser
-import os
-import requests
-import time
-from lumaai import LumaAI
+# # import configparser
+# import os
+# import requests
+# import time
+# from lumaai import LumaAI
 
-import folder_paths
+# import folder_paths
 
-# current_dir = os.path.dirname(os.path.abspath(__file__))
-# parent_dir = os.path.dirname(current_dir)
-# config_path = os.path.join(parent_dir, "config.ini")
 
-# config = configparser.ConfigParser()
-# config.read(config_path)
+# def download_file(url, file_name):
+#     response = requests.get(url, stream=True)
+#     with open(file_name, "wb") as file:
+#         file.write(response.content)
+#     print(f"File downloaded as {file_name}")
 
-# try:
-#     luma_api_key = config['API']['LUMAAI_API_KEY']
-#     if luma_api_key != "":
-#         os.environ["LUMAAI_API_KEY"] = luma_api_key
+# def parse_filename(filename):
+#     # Remove file extension if present
+#     filename = os.path.splitext(filename)[0]
+
+#     # Check if the filename ends with a directory separator
+#     if filename.endswith(os.path.sep):
+#         # If it does, we'll use the generation_id as the filename later
+#         directory = filename
+#         filename = ""
 #     else:
-#         print("Warning: LUMAAI_API_KEY is empty in config.ini")
-# except KeyError:
-#     print("Error: LUMAAI_API_KEY not found in config.ini")
+#         # Otherwise, split the path into directory and filename
+#         directory, filename = os.path.split(filename)
+
+#     # Create directories if they don't exist
+#     output_path = folder_paths.get_output_directory()
+#     full_directory = os.path.join(output_path, directory)
+#     if directory and not os.path.exists(full_directory):
+#         os.makedirs(full_directory)
+
+#     return directory, filename
 
 
-def download_file(url, file_name):
-    response = requests.get(url, stream=True)
-    with open(file_name, "wb") as file:
-        file.write(response.content)
-    print(f"File downloaded as {file_name}")
+# class Playbook_LumaAIClient:
+#     @classmethod
+#     def INPUT_TYPES(cls):
+#         return {
+#             "required": {
+#                 "playbook_api_key": ("STRING", {"multiline": False}),
+#             },
+#         }
 
-def parse_filename(filename):
-    # Remove file extension if present
-    filename = os.path.splitext(filename)[0]
 
-    # Check if the filename ends with a directory separator
-    if filename.endswith(os.path.sep):
-        # If it does, we'll use the generation_id as the filename later
-        directory = filename
-        filename = ""
-    else:
-        # Otherwise, split the path into directory and filename
-        directory, filename = os.path.split(filename)
+#     RETURN_TYPES = ("LUMACLIENT",)
+#     RETURN_NAMES = ("client",)
+#     FUNCTION = "run"
+#     CATEGORY = "Playbook 3D"
 
-    # Create directories if they don't exist
-    output_path = folder_paths.get_output_directory()
-    full_directory = os.path.join(output_path, directory)
-    if directory and not os.path.exists(full_directory):
-        os.makedirs(full_directory)
+#     def run(self, playbook_api_key):
+#         base_url = "https://accounts.playbookengine.com"
 
-    return directory, filename
+#         # Get user token using the Playbook API key
+#         jwt_request = requests.get(f"{base_url}/token-wrapper/get-tokens/{playbook_api_key}")
 
+#         try:
+#             if jwt_request is not None:
+#                 user_token = jwt_request.json()["access_token"]
+#         except Exception as e:
+#             print(f"Error with node: {e}")
+#             raise ValueError("API Key not found or incorrect")
+
+#         # waiting for the endpoint to be ready
+#         # headers = {"Authorization": f"Bearer {user_token}"}
+#         # luma_key_request = requests.get(f"{base_url}/api/get-luma-api-key", headers=headers)
+
+#         # if luma_key_request.status_code == 200:
+#         #     luma_api_key = luma_key_request.json().get("luma_api_key")
+#         #     if not luma_api_key:
+#         #         raise ValueError("Failed to retrieve Luma API key from endpoint")
+#         # else:
+#         #     raise ValueError(f"Failed to retrieve Luma API key, status code {luma_key_request.status_code}")
+
+#         luma_api_key = ""
+#         if not luma_api_key:
+#             raise ValueError("Luma API key not found in environment variables.")
+
+#         client = LumaAI(auth_token=luma_api_key)
+#         return (client,)
+
+
+
+# class Playbook_Text2Video:
+#     def __init__(self):
+#         self.output_dir = folder_paths.get_output_directory()
+
+#     @classmethod
+#     def INPUT_TYPES(cls):
+#         return {
+#             "required": {
+#                 "client": ("LUMACLIENT", {"forceInput": True}),
+#                 "prompt": ("STRING", {"multiline": True, "default": ""}),
+#                 "loop": ("BOOLEAN", {"default": False}),
+#                 "aspect_ratio": (["9:16", "3:4", "1:1", "4:3", "16:9", "21:9"],),
+#                 "save": ("BOOLEAN", {"default": True}),
+#             },
+#             "optional": {"filename": ("STRING", {"default": ""})},
+#         }
+
+#     RETURN_TYPES = ("STRING", "STRING")
+#     RETURN_NAMES = ("video_url", "generation_id")
+#     OUTPUT_NODE = True
+#     FUNCTION = "run"
+#     CATEGORY = "Playbook 3D"
+
+#     def run(self, client, prompt, loop, aspect_ratio, save, filename):
+#         """
+#         Generate a video from a text prompt.
+#         """
+#         if prompt == "":
+#             raise ValueError("Prompt is required")
+
+#         generation = client.generations.create(
+#             prompt=prompt, loop=loop, aspect_ratio=aspect_ratio
+#         )
+#         generation_id = generation.id
+#         completed = False
+#         while not completed:
+#             generation = client.generations.get(id=generation_id)
+#             if generation.state == "completed":
+#                 completed = True
+#             elif generation.state == "failed":
+#                 raise ValueError(f"Generation failed: {generation.failure_reason}")
+#             time.sleep(3)
+
+#         video_url = generation.assets.video
+#         if save:
+#             directory, filename = parse_filename(filename)
+#             if filename == "":
+#                 filename = generation_id
+#             download_file(video_url, os.path.join(self.output_dir, directory, filename + ".mp4"))
+
+#         return {
+#             "ui": {"text": [generation_id]},
+#             "result": (
+#                 video_url,
+#                 generation_id,
+#             ),
+#         }
+
+
+# class Playbook_Image2Video:
+#     def __init__(self):
+#         self.output_dir = folder_paths.get_output_directory()
+
+#     @classmethod
+#     def INPUT_TYPES(cls):
+#         return {
+#             "required": {
+#                 "client": ("LUMACLIENT", {"forceInput": True}),
+#                 "prompt": ("STRING", {"multiline": True, "default": ""}),
+#                 "loop": ("BOOLEAN", {"default": False}),
+#                 "save": ("BOOLEAN", {"default": True}),
+#             },
+#             "optional": {
+#                 "init_image_url": ("STRING", {"default": "", "forceInput": True}),
+#                 "final_image_url": ("STRING", {"default": "", "forceInput": True}),
+#                 "filename": ("STRING", {"default": ""}),
+#             },
+#         }
+
+#     RETURN_TYPES = ("STRING", "STRING")
+#     RETURN_NAMES = ("video_url", "generation_id")
+#     FUNCTION = "run"
+#     CATEGORY = "Playbook 3D"
+
+#     def run(
+#         self,
+#         client,
+#         prompt,
+#         loop,
+#         save,
+#         init_image_url="",
+#         final_image_url="",
+#         filename="",
+#     ):
+#         """
+#         Generate a video from an image prompt.
+#         """
+#         if init_image_url == "" and final_image_url == "":
+#             raise ValueError("At least one image URL is required")
+
+#         keyframes = {}
+#         if init_image_url != "":
+#             keyframes["frame0"] = {"type": "image", "url": init_image_url}
+#         if final_image_url != "":
+#             keyframes["frame1"] = {"type": "image", "url": final_image_url}
+
+#         generation = client.generations.create(
+#             prompt=prompt, loop=loop, keyframes=keyframes
+#         )
+#         generation_id = generation.id
+#         completed = False
+#         while not completed:
+#             generation = client.generations.get(id=generation_id)
+#             if generation.state == "completed":
+#                 completed = True
+#             elif generation.state == "failed":
+#                 raise ValueError(f"Generation failed: {generation.failure_reason}")
+#             time.sleep(3)
+
+#         video_url = generation.assets.video
+#         if save:
+#             directory, filename = parse_filename(filename)
+#             if filename == "":
+#                 filename = generation_id
+#             download_file(video_url, os.path.join(self.output_dir, directory, filename + ".mp4"))
+
+#         return {
+#             "ui": {"text": [generation_id]},
+#             "result": (
+#                 video_url,
+#                 generation_id,
+#             ),
+#         }
+
+
+# class Playbook_InterpolateGenerations:
+#     def __init__(self):
+#         self.output_dir = folder_paths.get_output_directory()
+
+#     @classmethod
+#     def INPUT_TYPES(cls):
+#         return {
+#             "required": {
+#                 "client": ("LUMACLIENT", {"forceInput": True}),
+#                 "prompt": ("STRING", {"multiline": True, "default": ""}),
+#                 "save": ("BOOLEAN", {"default": True}),
+#                 "generation_id_1": ("STRING", {"default": "", "forceInput": True}),
+#                 "generation_id_2": ("STRING", {"default": "", "forceInput": True}),
+#             },
+#             "optional": {"filename": ("STRING", {"default": ""})},
+#         }
+
+#     RETURN_TYPES = ("STRING", "STRING")
+#     RETURN_NAMES = ("video_url", "generation_id")
+#     FUNCTION = "run"
+#     CATEGORY = "Playbook 3D"
+
+#     def run(
+#         self,
+#         client,
+#         prompt,
+#         save,
+#         generation_id_1,
+#         generation_id_2,
+#         filename="",
+#     ):
+#         """
+#         Generate a video by interpolating between two existing generations.
+#         """
+#         if not generation_id_1 or not generation_id_2:
+#             raise ValueError("Both generation IDs are required")
+
+#         generation = client.generations.create(
+#             prompt=prompt,
+#             keyframes={
+#                 "frame0": {"type": "generation", "id": generation_id_1},
+#                 "frame1": {"type": "generation", "id": generation_id_2},
+#             },
+#         )
+#         generation_id = generation.id
+#         completed = False
+#         while not completed:
+#             generation = client.generations.get(id=generation_id)
+#             if generation.state == "completed":
+#                 completed = True
+#             elif generation.state == "failed":
+#                 raise ValueError(f"Generation failed: {generation.failure_reason}")
+#             time.sleep(3)
+
+#         video_url = generation.assets.video
+#         if save:
+#             directory, filename = parse_filename(filename)
+#             if filename == "":
+#                 filename = generation_id
+#             download_file(video_url, os.path.join(self.output_dir, directory, filename + ".mp4"))
+
+#         return {
+#             "ui": {"text": [generation_id]},
+#             "result": (
+#                 video_url,
+#                 generation_id,
+#             ),
+#         }
+
+
+# class Playbook_ExtendGeneration:
+#     def __init__(self):
+#         self.output_dir = folder_paths.get_output_directory()
+
+#     @classmethod
+#     def INPUT_TYPES(cls):
+#         return {
+#             "required": {
+#                 "client": ("LUMACLIENT", {"forceInput": True}),
+#                 "prompt": ("STRING", {"multiline": True, "default": ""}),
+#                 "save": ("BOOLEAN", {"default": True}),
+#             },
+#             "optional": {
+#                 "init_image_url": ("STRING", {"default": "", "forceInput": True}),
+#                 "final_image_url": ("STRING", {"default": "", "forceInput": True}),
+#                 "init_generation_id": ("STRING", {"default": "", "forceInput": True}),
+#                 "final_generation_id": ("STRING", {"default": "", "forceInput": True}),
+#                 "filename": ("STRING", {"default": ""}),
+#             },
+#         }
+
+#     RETURN_TYPES = ("STRING", "STRING")
+#     RETURN_NAMES = ("video_url", "generation_id")
+#     FUNCTION = "run"
+#     CATEGORY = "Playbook 3D"
+
+#     def run(
+#         self,
+#         client,
+#         prompt,
+#         save,
+#         init_image_url="",
+#         final_image_url="",
+#         init_generation_id="",
+#         final_generation_id="",
+#         filename="",
+#     ):
+#         """
+#         Generate a video by extending from an image to an existing generation.
+#         """
+#         if not init_generation_id and not final_generation_id:
+#             raise ValueError("You must provide at least one generation id")
+#         if init_image_url and init_generation_id:
+#             raise ValueError(
+#                 "You cannot provide both an init image and a init generation"
+#             )
+#         if final_image_url and final_generation_id:
+#             raise ValueError(
+#                 "You cannot provide both a final image and a final generation"
+#             )
+
+#         keyframes = {}
+#         if init_image_url != "":
+#             keyframes["frame0"] = {"type": "image", "url": init_image_url}
+#         if final_image_url != "":
+#             keyframes["frame1"] = {"type": "image", "url": final_image_url}
+#         if init_generation_id != "":
+#             keyframes["frame0"] = {"type": "generation", "id": init_generation_id}
+#         if final_generation_id != "":
+#             keyframes["frame1"] = {"type": "generation", "id": final_generation_id}
+
+#         generation = client.generations.create(prompt=prompt, keyframes=keyframes)
+#         new_generation_id = generation.id
+#         completed = False
+#         while not completed:
+#             generation = client.generations.get(id=new_generation_id)
+#             if generation.state == "completed":
+#                 completed = True
+#             elif generation.state == "failed":
+#                 raise ValueError(f"Generation failed: {generation.failure_reason}")
+#             time.sleep(3)
+
+#         video_url = generation.assets.video
+#         if save:
+#             directory, filename = parse_filename(filename)
+#             if filename == "":
+#                 filename = new_generation_id
+#             download_file(video_url, os.path.join(self.output_dir, directory, filename + ".mp4"))
+
+#         return {
+#             "ui": {"text": [new_generation_id]},
+#             "result": (
+#                 video_url,
+#                 new_generation_id,
+#             ),
+#         }
+
+
+# class Playbook_PreviewVideo:
+#     @classmethod
+#     def INPUT_TYPES(cls):
+#         return {
+#             "required": {
+#                 "video_url": ("STRING", {"forceInput": True}),
+#             }
+#         }
+
+#     OUTPUT_NODE = True
+#     FUNCTION = "run"
+#     CATEGORY = "Playbook 3D"
+#     RETURN_TYPES = ()
+
+#     def run(self, video_url):
+#         return {"ui": {"video_url": [video_url]}}
+
+import os
+import time
+import cv2
+import requests
+import tempfile
+from PIL import Image
+from lumaai import LumaAI
+import folder_paths
+import torch
+import numpy as np
+
+def get_luma_api_key(playbook_api_key):
+    base_url_accounts = "https://dev-accounts.playbook3d.com"
+    r = requests.get(f"{base_url_accounts}/token-wrapper/get-tokens/{playbook_api_key}")
+    if not r or r.status_code != 200:
+        raise ValueError("Invalid response. Check your Playbook API key.")
+    user_token = r.json().get("access_token")
+    if not user_token:
+        raise ValueError("No access_token in response. Check your Playbook API key.")
+
+    base_url_api = "https://dev-api.playbook3d.com"
+    secrets_url = f"{base_url_api}/get-secrets"
+    headers = {"Authorization": f"Bearer {user_token}"}
+    s = requests.get(secrets_url, headers=headers)
+    if s.status_code != 200:
+        raise ValueError(f"Failed to retrieve secrets from {secrets_url}. Status Code: {s.status_code}")
+    secrets_json = s.json()
+    luma_api_key = secrets_json.get("LUMA_API_KEY")
+    if not luma_api_key:
+        raise ValueError("LUMA_API_KEY not found in secrets response.")
+    return luma_api_key
+
+def download_video_to_temp(video_url):
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video:
+        r = requests.get(video_url, stream=True)
+        for chunk in r.iter_content(chunk_size=8192):
+            if chunk:
+                temp_video.write(chunk)
+        return temp_video.name
+
+def video_to_frames(path):
+    frames = []
+    cap = cv2.VideoCapture(path)
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frames.append(Image.fromarray(frame))
+    cap.release()
+    return frames
 
 class Playbook_LumaAIClient:
     @classmethod
     def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "playbook_api_key": ("STRING", {"multiline": False}),
-            },
-        }
-
+        return {"required": {"playbook_api_key": ("STRING", {"multiline": False})}}
 
     RETURN_TYPES = ("LUMACLIENT",)
     RETURN_NAMES = ("client",)
@@ -67,106 +456,64 @@ class Playbook_LumaAIClient:
     CATEGORY = "Playbook 3D"
 
     def run(self, playbook_api_key):
-        base_url = "https://accounts.playbookengine.com"
-
-        # Get user token using the Playbook API key
-        jwt_request = requests.get(f"{base_url}/token-wrapper/get-tokens/{playbook_api_key}")
-
-        try:
-            if jwt_request is not None:
-                user_token = jwt_request.json()["access_token"]
-        except Exception as e:
-            print(f"Error with node: {e}")
-            raise ValueError("API Key not found or incorrect")
-
-        # waiting for the endpoint to be ready
-        # headers = {"Authorization": f"Bearer {user_token}"}
-        # luma_key_request = requests.get(f"{base_url}/api/get-luma-api-key", headers=headers)
-
-        # if luma_key_request.status_code == 200:
-        #     luma_api_key = luma_key_request.json().get("luma_api_key")
-        #     if not luma_api_key:
-        #         raise ValueError("Failed to retrieve Luma API key from endpoint")
-        # else:
-        #     raise ValueError(f"Failed to retrieve Luma API key, status code {luma_key_request.status_code}")
-
-        luma_api_key = ""
-        if not luma_api_key:
-            raise ValueError("Luma API key not found in environment variables.")
-
+        luma_api_key = get_luma_api_key(playbook_api_key)
         client = LumaAI(auth_token=luma_api_key)
         return (client,)
 
-
-
 class Playbook_Text2Video:
-    def __init__(self):
-        self.output_dir = folder_paths.get_output_directory()
-
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "client": ("LUMACLIENT", {"forceInput": True}),
+                "playbook_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "loop": ("BOOLEAN", {"default": False}),
-                "aspect_ratio": (["9:16", "3:4", "1:1", "4:3", "16:9", "21:9"],),
+                "aspect_ratio": (["9:16","3:4","1:1","4:3","16:9","21:9"],),
                 "save": ("BOOLEAN", {"default": True}),
             },
             "optional": {"filename": ("STRING", {"default": ""})},
         }
 
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("video_url", "generation_id")
-    OUTPUT_NODE = True
+    RETURN_TYPES = ("LIST", "STRING")
+    RETURN_NAMES = ("frames", "message")
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
 
-    def run(self, client, prompt, loop, aspect_ratio, save, filename):
-        """
-        Generate a video from a text prompt.
-        """
-        if prompt == "":
+    def run(self, playbook_api_key, prompt, loop, aspect_ratio, save, filename):
+        if not prompt:
             raise ValueError("Prompt is required")
-
-        generation = client.generations.create(
-            prompt=prompt, loop=loop, aspect_ratio=aspect_ratio
-        )
-        generation_id = generation.id
-        completed = False
-        while not completed:
-            generation = client.generations.get(id=generation_id)
-            if generation.state == "completed":
-                completed = True
-            elif generation.state == "failed":
-                raise ValueError(f"Generation failed: {generation.failure_reason}")
+        luma_api_key = get_luma_api_key(playbook_api_key)
+        client = LumaAI(auth_token=luma_api_key)
+        g = client.generations.create(prompt=prompt, loop=loop, aspect_ratio=aspect_ratio)
+        gen_id = g.id
+        while True:
+            g = client.generations.get(id=gen_id)
+            if g.state == "completed":
+                break
+            if g.state == "failed":
+                raise ValueError(f"Generation failed: {g.failure_reason}")
             time.sleep(3)
-
-        video_url = generation.assets.video
+        video_url = g.assets.video
+        temp_path = download_video_to_temp(video_url)
         if save:
-            directory, filename = parse_filename(filename)
-            if filename == "":
-                filename = generation_id
-            download_file(video_url, os.path.join(self.output_dir, directory, filename + ".mp4"))
-
-        return {
-            "ui": {"text": [generation_id]},
-            "result": (
-                video_url,
-                generation_id,
-            ),
-        }
-
+            out_dir = folder_paths.get_output_directory()
+            if not os.path.exists(out_dir):
+                os.makedirs(out_dir)
+            name = filename or gen_id
+            final_path = os.path.join(out_dir, f"{name}.mp4")
+            os.rename(temp_path, final_path)
+            temp_path = final_path
+        frames = video_to_frames(temp_path)
+        if not frames:
+            return ([], "Error: No frames extracted.")
+        return (frames, f"Generated {len(frames)} frames (ID: {gen_id})")
 
 class Playbook_Image2Video:
-    def __init__(self):
-        self.output_dir = folder_paths.get_output_directory()
-
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "client": ("LUMACLIENT", {"forceInput": True}),
+                "playbook_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "loop": ("BOOLEAN", {"default": False}),
                 "save": ("BOOLEAN", {"default": True}),
@@ -178,71 +525,51 @@ class Playbook_Image2Video:
             },
         }
 
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("video_url", "generation_id")
+    RETURN_TYPES = ("LIST", "STRING")
+    RETURN_NAMES = ("frames", "message")
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
 
-    def run(
-        self,
-        client,
-        prompt,
-        loop,
-        save,
-        init_image_url="",
-        final_image_url="",
-        filename="",
-    ):
-        """
-        Generate a video from an image prompt.
-        """
-        if init_image_url == "" and final_image_url == "":
+    def run(self, playbook_api_key, prompt, loop, save, init_image_url="", final_image_url="", filename=""):
+        if not init_image_url and not final_image_url:
             raise ValueError("At least one image URL is required")
-
+        luma_api_key = get_luma_api_key(playbook_api_key)
+        client = LumaAI(auth_token=luma_api_key)
         keyframes = {}
-        if init_image_url != "":
+        if init_image_url:
             keyframes["frame0"] = {"type": "image", "url": init_image_url}
-        if final_image_url != "":
+        if final_image_url:
             keyframes["frame1"] = {"type": "image", "url": final_image_url}
-
-        generation = client.generations.create(
-            prompt=prompt, loop=loop, keyframes=keyframes
-        )
-        generation_id = generation.id
-        completed = False
-        while not completed:
-            generation = client.generations.get(id=generation_id)
-            if generation.state == "completed":
-                completed = True
-            elif generation.state == "failed":
-                raise ValueError(f"Generation failed: {generation.failure_reason}")
+        g = client.generations.create(prompt=prompt, loop=loop, keyframes=keyframes)
+        gen_id = g.id
+        while True:
+            g = client.generations.get(id=gen_id)
+            if g.state == "completed":
+                break
+            if g.state == "failed":
+                raise ValueError(f"Generation failed: {g.failure_reason}")
             time.sleep(3)
-
-        video_url = generation.assets.video
+        video_url = g.assets.video
+        temp_path = download_video_to_temp(video_url)
         if save:
-            directory, filename = parse_filename(filename)
-            if filename == "":
-                filename = generation_id
-            download_file(video_url, os.path.join(self.output_dir, directory, filename + ".mp4"))
-
-        return {
-            "ui": {"text": [generation_id]},
-            "result": (
-                video_url,
-                generation_id,
-            ),
-        }
-
+            out_dir = folder_paths.get_output_directory()
+            if not os.path.exists(out_dir):
+                os.makedirs(out_dir)
+            name = filename or gen_id
+            final_path = os.path.join(out_dir, f"{name}.mp4")
+            os.rename(temp_path, final_path)
+            temp_path = final_path
+        frames = video_to_frames(temp_path)
+        if not frames:
+            return ([], "Error: No frames extracted.")
+        return (frames, f"Generated {len(frames)} frames (ID: {gen_id})")
 
 class Playbook_InterpolateGenerations:
-    def __init__(self):
-        self.output_dir = folder_paths.get_output_directory()
-
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "client": ("LUMACLIENT", {"forceInput": True}),
+                "playbook_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "save": ("BOOLEAN", {"default": True}),
                 "generation_id_1": ("STRING", {"default": "", "forceInput": True}),
@@ -251,68 +578,50 @@ class Playbook_InterpolateGenerations:
             "optional": {"filename": ("STRING", {"default": ""})},
         }
 
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("video_url", "generation_id")
+    RETURN_TYPES = ("LIST", "STRING")
+    RETURN_NAMES = ("frames", "message")
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
 
-    def run(
-        self,
-        client,
-        prompt,
-        save,
-        generation_id_1,
-        generation_id_2,
-        filename="",
-    ):
-        """
-        Generate a video by interpolating between two existing generations.
-        """
+    def run(self, playbook_api_key, prompt, save, generation_id_1, generation_id_2, filename=""):
         if not generation_id_1 or not generation_id_2:
             raise ValueError("Both generation IDs are required")
-
-        generation = client.generations.create(
-            prompt=prompt,
-            keyframes={
-                "frame0": {"type": "generation", "id": generation_id_1},
-                "frame1": {"type": "generation", "id": generation_id_2},
-            },
-        )
-        generation_id = generation.id
-        completed = False
-        while not completed:
-            generation = client.generations.get(id=generation_id)
-            if generation.state == "completed":
-                completed = True
-            elif generation.state == "failed":
-                raise ValueError(f"Generation failed: {generation.failure_reason}")
-            time.sleep(3)
-
-        video_url = generation.assets.video
-        if save:
-            directory, filename = parse_filename(filename)
-            if filename == "":
-                filename = generation_id
-            download_file(video_url, os.path.join(self.output_dir, directory, filename + ".mp4"))
-
-        return {
-            "ui": {"text": [generation_id]},
-            "result": (
-                video_url,
-                generation_id,
-            ),
+        luma_api_key = get_luma_api_key(playbook_api_key)
+        client = LumaAI(auth_token=luma_api_key)
+        kf = {
+            "frame0": {"type": "generation", "id": generation_id_1},
+            "frame1": {"type": "generation", "id": generation_id_2},
         }
-
+        g = client.generations.create(prompt=prompt, keyframes=kf)
+        gen_id = g.id
+        while True:
+            g = client.generations.get(id=gen_id)
+            if g.state == "completed":
+                break
+            if g.state == "failed":
+                raise ValueError(f"Generation failed: {g.failure_reason}")
+            time.sleep(3)
+        video_url = g.assets.video
+        temp_path = download_video_to_temp(video_url)
+        if save:
+            out_dir = folder_paths.get_output_directory()
+            if not os.path.exists(out_dir):
+                os.makedirs(out_dir)
+            name = filename or gen_id
+            final_path = os.path.join(out_dir, f"{name}.mp4")
+            os.rename(temp_path, final_path)
+            temp_path = final_path
+        frames = video_to_frames(temp_path)
+        if not frames:
+            return ([], "Error: No frames extracted.")
+        return (frames, f"Generated {len(frames)} frames (ID: {gen_id})")
 
 class Playbook_ExtendGeneration:
-    def __init__(self):
-        self.output_dir = folder_paths.get_output_directory()
-
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "client": ("LUMACLIENT", {"forceInput": True}),
+                "playbook_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "save": ("BOOLEAN", {"default": True}),
             },
@@ -325,14 +634,14 @@ class Playbook_ExtendGeneration:
             },
         }
 
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("video_url", "generation_id")
+    RETURN_TYPES = ("LIST", "STRING")
+    RETURN_NAMES = ("frames", "message")
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
 
     def run(
         self,
-        client,
+        playbook_api_key,
         prompt,
         save,
         init_image_url="",
@@ -341,70 +650,57 @@ class Playbook_ExtendGeneration:
         final_generation_id="",
         filename="",
     ):
-        """
-        Generate a video by extending from an image to an existing generation.
-        """
         if not init_generation_id and not final_generation_id:
             raise ValueError("You must provide at least one generation id")
         if init_image_url and init_generation_id:
-            raise ValueError(
-                "You cannot provide both an init image and a init generation"
-            )
+            raise ValueError("Cannot provide both an init image and a init generation")
         if final_image_url and final_generation_id:
-            raise ValueError(
-                "You cannot provide both a final image and a final generation"
-            )
+            raise ValueError("Cannot provide both a final image and a final generation")
 
-        keyframes = {}
-        if init_image_url != "":
-            keyframes["frame0"] = {"type": "image", "url": init_image_url}
-        if final_image_url != "":
-            keyframes["frame1"] = {"type": "image", "url": final_image_url}
-        if init_generation_id != "":
-            keyframes["frame0"] = {"type": "generation", "id": init_generation_id}
-        if final_generation_id != "":
-            keyframes["frame1"] = {"type": "generation", "id": final_generation_id}
-
-        generation = client.generations.create(prompt=prompt, keyframes=keyframes)
-        new_generation_id = generation.id
-        completed = False
-        while not completed:
-            generation = client.generations.get(id=new_generation_id)
-            if generation.state == "completed":
-                completed = True
-            elif generation.state == "failed":
-                raise ValueError(f"Generation failed: {generation.failure_reason}")
+        luma_api_key = get_luma_api_key(playbook_api_key)
+        client = LumaAI(auth_token=luma_api_key)
+        kf = {}
+        if init_image_url:
+            kf["frame0"] = {"type": "image", "url": init_image_url}
+        if final_image_url:
+            kf["frame1"] = {"type": "image", "url": final_image_url}
+        if init_generation_id:
+            kf["frame0"] = {"type": "generation", "id": init_generation_id}
+        if final_generation_id:
+            kf["frame1"] = {"type": "generation", "id": final_generation_id}
+        g = client.generations.create(prompt=prompt, keyframes=kf)
+        gen_id = g.id
+        while True:
+            g = client.generations.get(id=gen_id)
+            if g.state == "completed":
+                break
+            if g.state == "failed":
+                raise ValueError(f"Generation failed: {g.failure_reason}")
             time.sleep(3)
-
-        video_url = generation.assets.video
+        video_url = g.assets.video
+        temp_path = download_video_to_temp(video_url)
         if save:
-            directory, filename = parse_filename(filename)
-            if filename == "":
-                filename = new_generation_id
-            download_file(video_url, os.path.join(self.output_dir, directory, filename + ".mp4"))
-
-        return {
-            "ui": {"text": [new_generation_id]},
-            "result": (
-                video_url,
-                new_generation_id,
-            ),
-        }
-
+            out_dir = folder_paths.get_output_directory()
+            if not os.path.exists(out_dir):
+                os.makedirs(out_dir)
+            name = filename or gen_id
+            final_path = os.path.join(out_dir, f"{name}.mp4")
+            os.rename(temp_path, final_path)
+            temp_path = final_path
+        frames = video_to_frames(temp_path)
+        if not frames:
+            return ([], "Error: No frames extracted.")
+        return (frames, f"Generated {len(frames)} frames (ID: {gen_id})")
 
 class Playbook_PreviewVideo:
     @classmethod
     def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "video_url": ("STRING", {"forceInput": True}),
-            }
-        }
+        return {"required": {"video_url": ("STRING", {"forceInput": True})}}
 
-    OUTPUT_NODE = True
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
     RETURN_TYPES = ()
+    OUTPUT_NODE = True
 
     def run(self, video_url):
         return {"ui": {"video_url": [video_url]}}
