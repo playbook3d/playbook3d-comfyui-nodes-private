@@ -4,13 +4,12 @@ import time
 import torch
 import numpy as np
 import tempfile
+import cv2
 from PIL import Image
 from fal_client import submit, upload_file
 from dotenv import load_dotenv
 
-
 load_dotenv()
-
 
 
 def upload_image(image):
@@ -47,54 +46,72 @@ def upload_image(image):
             os.unlink(temp_file_path)
 
 
-class Playbook_FalClient:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "playbook_api_key": ("STRING", {"multiline": False}),
-            },
-        }
+def get_fal_api_key(playbook_api_key):
+    base_url = "https://dev-accounts.playbook3d.com"
+    
+    # 1. Retrieve user token
+    jwt_request = requests.get(f"{base_url}/token-wrapper/get-tokens/{playbook_api_key}")
+    if not jwt_request or jwt_request.status_code != 200:
+        raise ValueError("Invalid response. Check your Playbook API key.")
 
-    RETURN_TYPES = ("FALCLIENT",)
-    RETURN_NAMES = ("client",)
-    FUNCTION = "run"
-    CATEGORY = "Playbook Fal"
+    user_token = jwt_request.json().get("access_token")
+    if not user_token:
+        raise ValueError("No access_token in response. Check your Playbook API key.")
 
-    def run(self, playbook_api_key):
-        base_url = "https://accounts.playbookengine.com"
+    base_url = "https://dev-api.playbook3d.com"
 
-        # Get user token using the Playbook API key
-        jwt_request = requests.get(f"{base_url}/token-wrapper/get-tokens/{playbook_api_key}")
+    secrets_url = f"{base_url}/get-secrets"
+    headers = {"Authorization": f"Bearer {user_token}"}
+    secrets_request = requests.get(secrets_url, headers=headers)
+    print("Secrets Response:", secrets_request.text)
 
-        if jwt_request.status_code != 200:
-            raise ValueError("Failed to retrieve user token. Check your Playbook API key.")
+    if secrets_request.status_code != 200:
+        raise ValueError(
+            f"Failed to retrieve secrets from {secrets_url}. "
+            f"Status Code: {secrets_request.status_code}"
+        )
 
-        try:
-            user_token = jwt_request.json()["access_token"]
-        except Exception as e:
-            print(f"Error parsing user token: {e}")
-            raise ValueError("Invalid response when retrieving user token.")
+    print("Secrets Response:", secrets_request.text)
 
-        headers = {"Authorization": f"Bearer {user_token}"}
+    secrets_json = secrets_request.json()
+    fal_api_key = secrets_json.get("FAL_API_KEY")
+    if not fal_api_key:
+        raise ValueError("FAL_API_KEY not found in secrets response.")
 
-        # Retrieve the Fal API key
-        # fal_key_request = requests.get(f"{base_url}/api/get-fal-api-key", headers=headers)
+    return fal_api_key
 
-        # if fal_key_request.status_code == 200:
-        #     fal_api_key = fal_key_request.json().get("fal_api_key")
-        #     if not fal_api_key:
-        #         raise ValueError("Failed to retrieve Fal API key from endpoint.")
-        # else:
-        #     raise ValueError(f"Failed to retrieve Fal API key, status code {fal_key_request.status_code}")
 
-        fal_api_key = os.getenv('FAL_API_KEY')
-        if not fal_api_key:
-            raise ValueError("FAL_API_KEY not found in environment variables")
+def video_to_frames(video_url):
+    frames = []
+    try:
+        # Download video
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video:
+            response = requests.get(video_url, stream=True)
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    temp_video.write(chunk)
+            temp_video_path = temp_video.name
 
-        # Returns the Fal client object. since there is no official fal api client, let's return a dict containing the fal_api_key.
-        client = {"fal_api_key": fal_api_key}
-        return (client,)
+        # OpenCV to read frames
+        cap = cv2.VideoCapture(temp_video_path)
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            # Convert BGR (OpenCV) -> RGB (PIL)
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(frame_rgb)
+            frames.append(pil_img)
+        cap.release()
+    except Exception as e:
+        print(f"Error converting video to frames: {e}")
+    finally:
+        if 'temp_video_path' in locals():
+            try:
+                os.unlink(temp_video_path)
+            except:
+                pass
+    return frames
 
 
 class Playbook_MiniMaxHailuo:
@@ -102,7 +119,7 @@ class Playbook_MiniMaxHailuo:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "client": ("FALCLIENT", {"forceInput": True}),
+                "playbook_api_key": ("STRING", {"multiline": False}),
                 "model_choice": (["minimax", "hailuo"], {"default": "minimax"}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "mode": (["text-to-video", "image-to-video"], {"default": "text-to-video"}),
@@ -112,16 +129,13 @@ class Playbook_MiniMaxHailuo:
             }
         }
 
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("video_url", "message")
+    RETURN_TYPES = ("LIST", "STRING")
+    RETURN_NAMES = ("frames", "message")
     FUNCTION = "run"
     CATEGORY = "Playbook Fal"
 
-    def run(self, client, model_choice, prompt, mode, image=None):
-        fal_api_key = client.get("fal_api_key")
-        if not fal_api_key:
-            raise ValueError("Fal API key not found in client object.")
-
+    def run(self, playbook_api_key, model_choice, prompt, mode, image=None):
+        fal_api_key = get_fal_api_key(playbook_api_key)
         os.environ["FAL_KEY"] = fal_api_key
 
         if model_choice == "minimax":
@@ -133,10 +147,10 @@ class Playbook_MiniMaxHailuo:
 
         if mode == "image-to-video":
             if image is None:
-                return ("", "Error: Image required for image-to-video mode")
+                return ([], "Error: Image required for image-to-video mode")
             image_url = upload_image(image)
             if not image_url:
-                return ("", "Error: Unable to upload image.")
+                return ([], "Error: Unable to upload image.")
             arguments["image_url"] = image_url
             endpoint = f"{base_endpoint}/image-to-video"
         else:
@@ -147,10 +161,17 @@ class Playbook_MiniMaxHailuo:
             result = handler.get()
             video_url = result["video"]["url"]
             print(f"Video generated successfully: {video_url}")
-            return (video_url, "Success")
+
+            # Convert video to frames
+            frames = video_to_frames(video_url)
+            if not frames:
+                return ([], "Error: Failed to extract frames from video.")
+
+            return (frames, "Success")
+
         except Exception as e:
             print(f"Error generating video: {str(e)}")
-            return ("", "Error: Unable to generate video.")
+            return ([], "Error: Unable to generate video.")
 
 
 class Playbook_Kling:
@@ -158,7 +179,7 @@ class Playbook_Kling:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "client": ("FALCLIENT", {"forceInput": True}),
+                "playbook_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "duration": (["5", "10"], {"default": "5"}),
                 "aspect_ratio": (["16:9", "9:16", "1:1"], {"default": "16:9"}),
@@ -169,18 +190,15 @@ class Playbook_Kling:
             }
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("video_url",)
+    RETURN_TYPES = ("LIST", "STRING")
+    RETURN_NAMES = ("frames", "message")
     FUNCTION = "run"
     CATEGORY = "Playbook Fal"
 
-    def run(self, client, prompt, duration, aspect_ratio, mode, image=None):
-        fal_api_key = client.get("fal_api_key")
-        if not fal_api_key:
-            raise ValueError("Fal API key not found in client object.")
-        
+    def run(self, playbook_api_key, prompt, duration, aspect_ratio, mode, image=None):
+        fal_api_key = get_fal_api_key(playbook_api_key)
         os.environ["FAL_KEY"] = fal_api_key
-        
+
         arguments = {
             "prompt": prompt,
             "duration": duration,
@@ -190,11 +208,11 @@ class Playbook_Kling:
         if mode == "image-to-video":
             if image is None:
                 print("Error: Image required for image-to-video mode.")
-                return ("",)
+                return ([], "Error: Image required for image-to-video mode.")
             image_url = upload_image(image)
             if not image_url:
                 print("Error: Unable to upload image.")
-                return ("",)
+                return ([], "Error: Unable to upload image.")
             arguments["image_url"] = image_url
             endpoint = "fal-ai/kling-video/v1/standard/image-to-video"
         else:
@@ -206,7 +224,14 @@ class Playbook_Kling:
             result = handler.get()
             video_url = result["video"]["url"]
             print(f"Video generated successfully: {video_url}")
-            return (video_url,)
+
+            # Convert video to frames
+            frames = video_to_frames(video_url)
+            if not frames:
+                return ([], "Error: Failed to extract frames from video.")
+
+            return (frames, "Success")
+
         except Exception as e:
             print(f"Error generating video: {str(e)}")
-            return ("",)
+            return ([], "Error: Unable to generate video.")
