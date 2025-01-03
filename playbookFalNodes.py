@@ -46,11 +46,11 @@ def upload_image(image):
             os.unlink(temp_file_path)
 
 
-def get_fal_api_key(playbook_api_key):
+def get_fal_api_key(api_key):
     base_url = "https://dev-accounts.playbook3d.com"
     
     # 1. Retrieve user token
-    jwt_request = requests.get(f"{base_url}/token-wrapper/get-tokens/{playbook_api_key}")
+    jwt_request = requests.get(f"{base_url}/token-wrapper/get-tokens/{api_key}")
     if not jwt_request or jwt_request.status_code != 200:
         raise ValueError("Invalid response. Check your Playbook API key.")
 
@@ -119,7 +119,7 @@ class Playbook_MiniMaxHailuo:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "playbook_api_key": ("STRING", {"multiline": False}),
+                "api_key": ("STRING", {"multiline": False}),
                 "model_choice": (["minimax", "hailuo"], {"default": "minimax"}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "mode": (["text-to-video", "image-to-video"], {"default": "text-to-video"}),
@@ -129,13 +129,13 @@ class Playbook_MiniMaxHailuo:
             }
         }
 
-    RETURN_TYPES = ("LIST", "STRING")
-    RETURN_NAMES = ("frames", "message")
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("images",)
     FUNCTION = "run"
     CATEGORY = "Playbook Fal"
 
-    def run(self, playbook_api_key, model_choice, prompt, mode, image=None):
-        fal_api_key = get_fal_api_key(playbook_api_key)
+    def run(self, api_key, model_choice, prompt, mode, image=None):
+        fal_api_key = get_fal_api_key(api_key)
         os.environ["FAL_KEY"] = fal_api_key
 
         if model_choice == "minimax":
@@ -163,11 +163,11 @@ class Playbook_MiniMaxHailuo:
             print(f"Video generated successfully: {video_url}")
 
             # Convert video to frames
-            frames = video_to_frames(video_url)
-            if not frames:
+            images = video_to_frames(video_url)
+            if not images:
                 return ([], "Error: Failed to extract frames from video.")
 
-            return (frames, "Success")
+            return (images, "Success")
 
         except Exception as e:
             print(f"Error generating video: {str(e)}")
@@ -179,7 +179,7 @@ class Playbook_Kling:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "playbook_api_key": ("STRING", {"multiline": False}),
+                "api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "duration": (["5", "10"], {"default": "5"}),
                 "aspect_ratio": (["16:9", "9:16", "1:1"], {"default": "16:9"}),
@@ -190,13 +190,13 @@ class Playbook_Kling:
             }
         }
 
-    RETURN_TYPES = ("LIST", "STRING")
-    RETURN_NAMES = ("frames", "message")
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("images",)
     FUNCTION = "run"
     CATEGORY = "Playbook Fal"
 
-    def run(self, playbook_api_key, prompt, duration, aspect_ratio, mode, image=None):
-        fal_api_key = get_fal_api_key(playbook_api_key)
+    def run(self, api_key, prompt, duration, aspect_ratio, mode, image=None):
+        fal_api_key = get_fal_api_key(api_key)
         os.environ["FAL_KEY"] = fal_api_key
 
         arguments = {
@@ -226,11 +226,11 @@ class Playbook_Kling:
             print(f"Video generated successfully: {video_url}")
 
             # Convert video to frames
-            frames = video_to_frames(video_url)
-            if not frames:
+            images = video_to_frames(video_url)
+            if not images:
                 return ([], "Error: Failed to extract frames from video.")
 
-            return (frames, "Success")
+            return (images, "Success")
 
         except Exception as e:
             print(f"Error generating video: {str(e)}")
