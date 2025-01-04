@@ -47,7 +47,7 @@ def upload_image(image):
 def get_fal_api_key(playbook_api_key):
     base_url = "https://dev-accounts.playbook3d.com"
     
-    # 1. Retrieve user token
+    # Retrieve user token
     jwt_request = requests.get(f"{base_url}/token-wrapper/get-tokens/{playbook_api_key}")
     if not jwt_request or jwt_request.status_code != 200:
         raise ValueError("Invalid response. Check your Playbook API key.")

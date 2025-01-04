@@ -59,8 +59,8 @@ def video_to_images(path):
     if not images:
         return None
         
-    # Stack all frames together
-    frames = torch.stack(images)  # [N, H, W, C]
+
+    frames = torch.stack(images)
     
     print(f"Debug: Final tensor shape: {frames.shape}")
     print(f"Debug: Final tensor dtype: {frames.dtype}")
@@ -104,53 +104,6 @@ class Playbook_Text2Video:
     RETURN_NAMES = ("images",)
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
-
-    # def run(self, api_key, prompt, loop, aspect_ratio, save, filename):
-    #     print("Debug: Starting Text2Video generation")
-    #     if not prompt:
-    #         raise ValueError("Prompt is required")
-            
-    #     luma_api_key = get_luma_api_key(api_key)
-    #     client = LumaAI(auth_token=luma_api_key)
-
-    #     print(f"Debug: Creating generation with prompt: {prompt}")
-    #     g = client.generations.create(prompt=prompt, loop=loop, aspect_ratio=aspect_ratio)
-    #     gen_id = g.id
-        
-    #     print(f"Debug: Waiting for generation {gen_id}")
-    #     while True:
-    #         g = client.generations.get(id=gen_id)
-    #         if g.state == "completed":
-    #             break
-    #         if g.state == "failed":
-    #             raise ValueError(f"Generation failed: {g.failure_reason}")
-    #         time.sleep(3)
-
-    #     print("Debug: Generation completed")
-    #     video_url = g.assets.video
-    #     temp_path = download_video_to_temp(video_url)
-    #     print(f"Debug: Downloaded video to {temp_path}")
-        
-    #     if save:
-    #         out_dir = folder_paths.get_output_directory()
-    #         if not os.path.exists(out_dir):
-    #             os.makedirs(out_dir)
-    #         name = filename or gen_id
-    #         final_path = os.path.join(out_dir, f"{name}.mp4")
-    #         os.rename(temp_path, final_path)
-    #         temp_path = final_path
-    #         print(f"Debug: Saved video to {final_path}")
-
-    #     print("Debug: Converting video to images")
-    #     images = video_to_images(temp_path)
-    #     if not images:
-    #         raise ValueError("Error: No images extracted.")
-            
-    #     print(f"Debug: Returning {len(images)} images")
-    #     print(f"Debug: Return type shape: {[img.shape for img in images[:1]]}")
-    #     print(f"Debug: Return type dtype: {images[0].dtype}")
-        
-    #     return (images,)
 
     def run(self, api_key, prompt, loop, aspect_ratio, save, filename):
         if not prompt:

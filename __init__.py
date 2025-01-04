@@ -31,7 +31,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Playbook Kling": "Playbook Kling Video",
     "Playbook Video Preview": "Playbook Video Preview",
     "Playbook LumaAIClient": "Playbook LumaAI Client",
-    "Playbook Text2Video": "Playbook Text to Video",
+    "Playbook Text2Video": "Playbook Luma Video",
     "Playbook Image2Video": "Playbook Image to Video",
     "Playbook InterpolateGenerations": "Playbook Interpolate Generations",
     "Playbook ExtendGeneration": "Playbook Extend Generation",
