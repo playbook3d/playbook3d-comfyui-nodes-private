@@ -1,7 +1,3 @@
-from .playbookFalNodes import (
-    Playbook_MiniMaxHailuo,
-    Playbook_Kling,
-)
 
 from .lumaDreamMachineNode import (
     Playbook_LumaAIClient,
@@ -13,8 +9,6 @@ from .lumaDreamMachineNode import (
 )
 
 NODE_CLASS_MAPPINGS = {
-    "Playbook MiniMaxHailuo": Playbook_MiniMaxHailuo,
-    "Playbook Kling": Playbook_Kling,
     "Playbook LumaAIClient": Playbook_LumaAIClient,
     "Playbook Text2Video": Playbook_Text2Video,
     "Playbook Image2Video": Playbook_Image2Video,
@@ -24,8 +18,6 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "Playbook MiniMaxHailuo": "Playbook MiniMax/Hailuo Video",
-    "Playbook Kling": "Playbook Kling Video",
     "Playbook LumaAIClient": "Playbook LumaAI Client",
     "Playbook Text2Video": "Playbook Luma Video",
     "Playbook Image2Video": "Playbook Image to Video",
