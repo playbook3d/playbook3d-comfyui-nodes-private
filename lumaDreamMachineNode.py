@@ -86,6 +86,7 @@ class Playbook_LumaAIClient:
         luma_api_key = get_luma_api_key(api_key)
         client = LumaAI(auth_token=luma_api_key)
         return (client,)
+
 class Playbook_Text2Video:
     @classmethod
     def INPUT_TYPES(cls):
@@ -94,7 +95,10 @@ class Playbook_Text2Video:
                 "api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "loop": ("BOOLEAN", {"default": False}),
-                "aspect_ratio": (["9:16","3:4","1:1","4:3","16:9","21:9"],),
+                "aspect_ratio": ("STRING", {
+                    "default": "16:9",
+                    "multiline": False,
+                }),
                 "save": ("BOOLEAN", {"default": True}),
             },
             "optional": {"filename": ("STRING", {"default": ""})},
@@ -105,9 +109,23 @@ class Playbook_Text2Video:
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
 
+    def validate_aspect_ratio(self, aspect_ratio):
+        """Validate the aspect ratio string format."""
+        try:
+            # Check if the format is correct (two numbers separated by ':')
+            width, height = map(int, aspect_ratio.split(':'))
+            if width <= 0 or height <= 0:
+                raise ValueError("Aspect ratio values must be positive numbers")
+            return True
+        except ValueError:
+            raise ValueError("Invalid aspect ratio format. Must be two positive numbers separated by ':' (e.g., '16:9')")
+
     def run(self, api_key, prompt, loop, aspect_ratio, save, filename):
         if not prompt:
             raise ValueError("Prompt is required")
+        
+        # Validate aspect ratio format
+        self.validate_aspect_ratio(aspect_ratio)
                 
         luma_api_key = get_luma_api_key(api_key)
         client = LumaAI(auth_token=luma_api_key)
