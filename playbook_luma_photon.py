@@ -8,9 +8,6 @@ from PIL import Image
 
 import folder_paths
 from lumaai import LumaAI
-from .lumaDreamMachineNode import (
-    get_luma_api_key,  # from your existing file
-)
 
 
 def download_image_to_temp(image_url):
@@ -28,7 +25,7 @@ def download_image_to_temp(image_url):
 
 def image_to_tensor(path):
     """
-    Load an image from disk, convert to RGB float32 tensor [H,W,C].
+    Load an image from disk, convert to RGB float32 tensor [H, W, C].
     """
     img_pil = Image.open(path).convert("RGB")
     arr = np.array(img_pil, dtype=np.float32) / 255.0
@@ -38,8 +35,8 @@ def image_to_tensor(path):
 
 class Playbook_PhotonText2Image:
     """
-    Generate a single image from a text prompt using Photon.
-    Returns a 3D PyTorch tensor (H,W,C) to ComfyUI as an IMAGE output.
+    Generate a single image from a text prompt using the Luma Photon API.
+    Returns a 4D PyTorch tensor (1, H, W, 3) to ComfyUI as an IMAGE output.
     """
     @classmethod
     def INPUT_TYPES(cls):
@@ -75,13 +72,12 @@ class Playbook_PhotonText2Image:
             raise ValueError("Prompt is required")
         self.validate_aspect_ratio(aspect_ratio)
 
-        # Auth
-        luma_api_key = get_luma_api_key(api_key)
-        client = LumaAI(auth_token=luma_api_key)
+        # Use the Luma API Key directly
+        client = LumaAI(auth_token=api_key)
 
         print(f"Debug: Creating Photon image from prompt: {prompt}")
-        # Create the image generation (Photon)
-        # If your environment doesn’t accept `model=...`, omit that parameter.
+        # Create the image generation
+        # If your environment doesn’t accept "model=...", omit or adapt that parameter.
         generation = client.generations.image.create(
             prompt=prompt,
             aspect_ratio=aspect_ratio,
@@ -112,20 +108,20 @@ class Playbook_PhotonText2Image:
             temp_path = final_path
             print(f"Debug: Saved Photon image to {final_path}")
 
-        # Convert to a PyTorch tensor
+        # Convert to a PyTorch tensor, then add a leading batch dimension
         image_tensor = image_to_tensor(temp_path)
         if image_tensor is None:
             raise ValueError("Error: Could not create image tensor from Photon output.")
-        
-        # Suppose image_tensor is (H, W, 3)
-        image_tensor = image_tensor.unsqueeze(0)  # Now shape is (1, H, W, 3)
+        # (H, W, 3) -> (1, H, W, 3) so ComfyUI sees correct color
+        image_tensor = image_tensor.unsqueeze(0)
+
         return (image_tensor,)
 
 
 class Playbook_PhotonModifyImage:
     """
     Modify an existing image via Photon by providing a reference image plus a prompt.
-    Returns the modified image as a 3D tensor (H,W,C).
+    Returns the modified image as a 4D tensor (1, H, W, 3).
     """
     @classmethod
     def INPUT_TYPES(cls):
@@ -152,14 +148,9 @@ class Playbook_PhotonModifyImage:
         if not modify_image_url:
             raise ValueError("Must provide a URL for the image to modify")
 
-        # Auth
-        luma_api_key = get_luma_api_key(api_key)
-        client = LumaAI(auth_token=luma_api_key)
+        # Directly pass user Luma Key
+        client = LumaAI(auth_token=api_key)
 
-        # Prepare the reference
-        # The older Luma environment might use "modify_image_ref" or "image_ref" differently.  
-        # If your environment only supports "references=[{'url':..., 'type':...}]",
-        # please adjust accordingly.
         print(f"Debug: Modifying image with Photon, prompt: {prompt}")
         generation = client.generations.image.create(
             prompt=prompt,
@@ -195,14 +186,15 @@ class Playbook_PhotonModifyImage:
         image_tensor = image_to_tensor(temp_path)
         if image_tensor is None:
             raise ValueError("Error: Could not create image tensor after modification.")
+        # Expand dims for ComfyUI color
+        image_tensor = image_tensor.unsqueeze(0)
 
         return (image_tensor,)
 
 
 class Playbook_PhotonPreviewImage:
     """
-    Just like PreviewVideo, but for an image URL.
-    Displays the image in the ComfyUI interface (no returned IMAGE tensor).
+    Preview a remote image URL in the ComfyUI interface (no returned IMAGE tensor).
     """
     @classmethod
     def INPUT_TYPES(cls):
@@ -218,5 +210,5 @@ class Playbook_PhotonPreviewImage:
     OUTPUT_NODE = True
 
     def run(self, image_url):
-        # The "ui -> image_url" property instructs ComfyUI to show it in the UI
+        # Tells ComfyUI to show this image in the UI panel
         return {"ui": {"image_url": [image_url]}}
