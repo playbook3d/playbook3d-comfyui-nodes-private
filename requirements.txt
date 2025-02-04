@@ -1,3 +1,3 @@
 python-dotenv==1.0.0
-lumaai
+lumaai==1.3.0
 fal-client

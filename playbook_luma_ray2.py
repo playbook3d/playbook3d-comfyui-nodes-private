@@ -1,93 +1,19 @@
 import os
 import time
-import cv2
-import requests
-import tempfile
-from PIL import Image
-from lumaai import LumaAI
 import folder_paths
-import torch
-import numpy as np
-
-def get_luma_api_key(api_key):
-    base_url_accounts = "https://accounts.playbook3d.com"
-    r = requests.get(f"{base_url_accounts}/token-wrapper/get-tokens/{api_key}")
-    if not r or r.status_code != 200:
-        raise ValueError("Invalid response. Check your API key.")
-    user_token = r.json().get("access_token")
-    if not user_token:
-        raise ValueError("No access_token in response. Check your API key.")
-
-    base_url_api = "https://api.playbook3d.com"
-    secrets_url = f"{base_url_api}/get-secrets"
-    headers = {"Authorization": f"Bearer {user_token}"}
-    s = requests.get(secrets_url, headers=headers)
-    if s.status_code != 200:
-        raise ValueError(f"Failed to retrieve secrets from {secrets_url}. Status Code: {s.status_code}")
-    secrets_json = s.json()
-    luma_api_key = secrets_json.get("LUMA_API_KEY")
-    if not luma_api_key:
-        raise ValueError("LUMA_API_KEY not found in secrets response.")
-    return luma_api_key
-
-def download_video_to_temp(video_url):
-    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video:
-        r = requests.get(video_url, stream=True)
-        for chunk in r.iter_content(chunk_size=8192):
-            if chunk:
-                temp_video.write(chunk)
-        return temp_video.name
-
-def video_to_images(path):
-    images = []
-    cap = cv2.VideoCapture(path)
-    print("Debug: Starting video to frames conversion")
-    
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-            
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frame = frame.astype(np.float32) / 255.0
-        frame_tensor = torch.from_numpy(frame)
-        
-        images.append(frame_tensor)
-        
-    cap.release()
-    
-    if not images:
-        return None
-        
-
-    frames = torch.stack(images)
-    
-    print(f"Debug: Final tensor shape: {frames.shape}")
-    print(f"Debug: Final tensor dtype: {frames.dtype}")
-    
-    return frames
+from .lumaDreamMachineNode import (
+    get_luma_api_key,
+    download_video_to_temp,
+    video_to_images,
+)
+from lumaai import LumaAI
 
 
-class Playbook_LumaAIClient:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "api_key": ("STRING", {"multiline": False})
-            }
-        }
-
-    RETURN_TYPES = ("LUMACLIENT",)
-    RETURN_NAMES = ("client",)
-    FUNCTION = "run"
-    CATEGORY = "Playbook 3D"
-
-    def run(self, api_key):
-        luma_api_key = get_luma_api_key(api_key)
-        client = LumaAI(auth_token=luma_api_key)
-        return (client,)
-
-class Playbook_Text2Video:
+class Playbook_Ray2Text2Video:
+    """
+    Create a new video from a text prompt using the Ray 2 model.
+    Returns frames as a 4D tensor for ComfyUI.
+    """
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -95,13 +21,14 @@ class Playbook_Text2Video:
                 "api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "loop": ("BOOLEAN", {"default": False}),
-                "aspect_ratio": ("STRING", {
-                    "default": "16:9",
-                    "multiline": False,
-                }),
+                "aspect_ratio": ("STRING", {"default": "16:9"}),
+                "duration": ("STRING", {"default": "5s"}),
+                "resolution": ("STRING", {"default": "540p"}),
                 "save": ("BOOLEAN", {"default": True}),
             },
-            "optional": {"filename": ("STRING", {"default": ""})},
+            "optional": {
+                "filename": ("STRING", {"default": ""}),
+            },
         }
 
     RETURN_TYPES = ("IMAGE",)
@@ -110,31 +37,54 @@ class Playbook_Text2Video:
     CATEGORY = "Playbook 3D"
 
     def validate_aspect_ratio(self, aspect_ratio):
-        """Validate the aspect ratio string format."""
+        """Validate the aspect ratio string format (e.g. '16:9')."""
         try:
-            # Check if the format is correct (two numbers separated by ':')
             width, height = map(int, aspect_ratio.split(':'))
             if width <= 0 or height <= 0:
-                raise ValueError("Aspect ratio values must be positive numbers")
+                raise ValueError("Aspect ratio values must be positive numbers.")
             return True
         except ValueError:
-            raise ValueError("Invalid aspect ratio format. Must be two positive numbers separated by ':' (e.g., '16:9')")
+            raise ValueError("Invalid aspect ratio format. Must be 'W:H' with positive integers.")
 
-    def run(self, api_key, prompt, loop, aspect_ratio, save, filename):
+    def run(
+        self,
+        api_key,
+        prompt,
+        loop,
+        aspect_ratio,
+        duration,
+        resolution,
+        save,
+        filename="",
+    ):
         if not prompt:
             raise ValueError("Prompt is required")
-        
-        # Validate aspect ratio format
-        self.validate_aspect_ratio(aspect_ratio)
-                
-        luma_api_key = get_luma_api_key(api_key)
-        client = LumaAI(auth_token=luma_api_key)
 
-        print(f"Debug: Creating generation with prompt: {prompt}")
-        g = client.generations.create(prompt=prompt, loop=loop, aspect_ratio=aspect_ratio)
-        gen_id = g.id
-        
-        print(f"Debug: Waiting for generation {gen_id}")
+        # Validate aspect ratio
+        self.validate_aspect_ratio(aspect_ratio)
+
+        # Auth
+        luma_api_key = get_luma_api_key(api_key)
+        print(luma_api_key)
+        client = LumaAI(auth_token=luma_api_key)
+        model = "ray-2"
+        # Create generation (Ray 2 model)
+        print(f"Debug: Creating Ray2 video from text prompt: {prompt}")
+        print(client)
+        generation = client.generations.create(
+            prompt=prompt,
+            model=model,
+            loop=loop,
+            aspect_ratio=aspect_ratio,
+            duration=duration,
+            resolution=resolution,
+        )
+
+
+        gen_id = generation.id
+
+        # Poll until complete
+        print(f"Debug: Waiting for Ray2 generation {gen_id}")
         while True:
             g = client.generations.get(id=gen_id)
             if g.state == "completed":
@@ -143,10 +93,11 @@ class Playbook_Text2Video:
                 raise ValueError(f"Generation failed: {g.failure_reason}")
             time.sleep(3)
 
-        print("Debug: Generation completed")
+        # Download result
         video_url = g.assets.video
         temp_path = download_video_to_temp(video_url)
-        
+
+        # Optionally save
         if save:
             out_dir = folder_paths.get_output_directory()
             if not os.path.exists(out_dir):
@@ -155,16 +106,21 @@ class Playbook_Text2Video:
             final_path = os.path.join(out_dir, f"{name}.mp4")
             os.rename(temp_path, final_path)
             temp_path = final_path
-            print(f"Debug: Saved video to {final_path}")
+            print(f"Debug: Saved Ray2 video to {final_path}")
 
-        print("Debug: Converting video to images")
+        # Convert to frames
         images = video_to_images(temp_path)
-        if images is None:
-            raise ValueError("Error: No frames extracted.")
-            
+        if not images:
+            raise ValueError("Error: No frames extracted from Ray2 video.")
+
         return (images,)
 
-class Playbook_Image2Video:
+
+class Playbook_Ray2Image2Video:
+    """
+    Create a new video from images (init & final) + a text prompt using the Ray 2 model.
+    Returns frames as a 4D tensor.
+    """
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -172,6 +128,8 @@ class Playbook_Image2Video:
                 "api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "loop": ("BOOLEAN", {"default": False}),
+                "duration": ("STRING", {"default": "5s"}),
+                "resolution": ("STRING", {"default": "540p"}),
                 "save": ("BOOLEAN", {"default": True}),
             },
             "optional": {
@@ -186,22 +144,45 @@ class Playbook_Image2Video:
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
 
-    def run(self, api_key, prompt, loop, save, init_image_url="", final_image_url="", filename=""):
+    def run(
+        self,
+        api_key,
+        prompt,
+        loop,
+        duration,
+        resolution,
+        save,
+        init_image_url="",
+        final_image_url="",
+        filename="",
+    ):
         if not init_image_url and not final_image_url:
-            raise ValueError("At least one image URL is required")
+            raise ValueError("At least one image URL (init or final) is required.")
 
+        # Auth
         luma_api_key = get_luma_api_key(api_key)
         client = LumaAI(auth_token=luma_api_key)
 
+        # Build keyframes
         keyframes = {}
         if init_image_url:
             keyframes["frame0"] = {"type": "image", "url": init_image_url}
         if final_image_url:
             keyframes["frame1"] = {"type": "image", "url": final_image_url}
 
-        g = client.generations.create(prompt=prompt, loop=loop, keyframes=keyframes)
+        # Create Ray2 generation
+        print(f"Debug: Creating Ray2 video from images + prompt: {prompt}")
+        g = client.generations.create(
+            prompt=prompt,
+            model="ray-2",
+            loop=loop,
+            keyframes=keyframes,
+            duration=duration,
+            resolution=resolution,
+        )
         gen_id = g.id
 
+        print(f"Debug: Waiting for Ray2 generation {gen_id}")
         while True:
             g = client.generations.get(id=gen_id)
             if g.state == "completed":
@@ -210,8 +191,11 @@ class Playbook_Image2Video:
                 raise ValueError(f"Generation failed: {g.failure_reason}")
             time.sleep(3)
 
+        # Download video
         video_url = g.assets.video
         temp_path = download_video_to_temp(video_url)
+
+        # Optionally save
         if save:
             out_dir = folder_paths.get_output_directory()
             if not os.path.exists(out_dir):
@@ -220,25 +204,36 @@ class Playbook_Image2Video:
             final_path = os.path.join(out_dir, f"{name}.mp4")
             os.rename(temp_path, final_path)
             temp_path = final_path
+            print(f"Debug: Saved Ray2 Image2Video to {final_path}")
 
+        # Convert to frames
         images = video_to_images(temp_path)
         if not images:
-            raise ValueError("Error: No images extracted.")
+            raise ValueError("Error: No frames extracted from Ray2 video.")
 
         return (images,)
 
-class Playbook_InterpolateGenerations:
+
+class Playbook_Ray2InterpolateGenerations:
+    """
+    Create a new Ray2 video by interpolating between two existing Luma generation IDs
+    plus a text prompt. Returns frames as a 4D tensor.
+    """
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
+                "duration": ("STRING", {"default": "5s"}),
+                "resolution": ("STRING", {"default": "540p"}),
                 "save": ("BOOLEAN", {"default": True}),
                 "generation_id_1": ("STRING", {"default": "", "forceInput": True}),
                 "generation_id_2": ("STRING", {"default": "", "forceInput": True}),
             },
-            "optional": {"filename": ("STRING", {"default": ""})},
+            "optional": {
+                "filename": ("STRING", {"default": ""}),
+            },
         }
 
     RETURN_TYPES = ("IMAGE",)
@@ -246,21 +241,42 @@ class Playbook_InterpolateGenerations:
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
 
-    def run(self, api_key, prompt, save, generation_id_1, generation_id_2, filename=""):
+    def run(
+        self,
+        api_key,
+        prompt,
+        duration,
+        resolution,
+        save,
+        generation_id_1,
+        generation_id_2,
+        filename="",
+    ):
         if not generation_id_1 or not generation_id_2:
-            raise ValueError("Both generation IDs are required")
+            raise ValueError("Both generation_id_1 and generation_id_2 are required.")
 
+        # Auth
         luma_api_key = get_luma_api_key(api_key)
         client = LumaAI(auth_token=luma_api_key)
 
+        # Keyframes referencing previous generations
         kf = {
             "frame0": {"type": "generation", "id": generation_id_1},
             "frame1": {"type": "generation", "id": generation_id_2},
         }
 
-        g = client.generations.create(prompt=prompt, keyframes=kf)
+        # Create Ray2 interpolation
+        print("Debug: Creating Ray2 interpolation video")
+        g = client.generations.create(
+            prompt=prompt,
+            model="ray-2",
+            keyframes=kf,
+            duration=duration,
+            resolution=resolution,
+        )
         gen_id = g.id
 
+        print(f"Debug: Waiting for Ray2 interpolation {gen_id}")
         while True:
             g = client.generations.get(id=gen_id)
             if g.state == "completed":
@@ -269,8 +285,11 @@ class Playbook_InterpolateGenerations:
                 raise ValueError(f"Generation failed: {g.failure_reason}")
             time.sleep(3)
 
+        # Download
         video_url = g.assets.video
         temp_path = download_video_to_temp(video_url)
+
+        # Optionally save
         if save:
             out_dir = folder_paths.get_output_directory()
             if not os.path.exists(out_dir):
@@ -279,20 +298,28 @@ class Playbook_InterpolateGenerations:
             final_path = os.path.join(out_dir, f"{name}.mp4")
             os.rename(temp_path, final_path)
             temp_path = final_path
+            print(f"Debug: Saved Ray2 interpolation video to {final_path}")
 
         images = video_to_images(temp_path)
         if not images:
-            raise ValueError("Error: No images extracted.")
+            raise ValueError("Error: No frames extracted from Ray2 interpolation.")
 
         return (images,)
 
-class Playbook_ExtendGeneration:
+
+class Playbook_Ray2ExtendGeneration:
+    """
+    Extend or bridge from an image/generation to another image/generation with Ray2
+    plus a text prompt. Returns frames as a 4D tensor.
+    """
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
+                "duration": ("STRING", {"default": "5s"}),
+                "resolution": ("STRING", {"default": "540p"}),
                 "save": ("BOOLEAN", {"default": True}),
             },
             "optional": {
@@ -313,6 +340,8 @@ class Playbook_ExtendGeneration:
         self,
         api_key,
         prompt,
+        duration,
+        resolution,
         save,
         init_image_url="",
         final_image_url="",
@@ -320,16 +349,19 @@ class Playbook_ExtendGeneration:
         final_generation_id="",
         filename="",
     ):
+        # Validate
         if not init_generation_id and not final_generation_id:
-            raise ValueError("You must provide at least one generation id")
+            raise ValueError("You must provide at least one generation ID (init or final).")
         if init_image_url and init_generation_id:
-            raise ValueError("Cannot provide both an init image and an init generation")
+            raise ValueError("Cannot provide both an init image and an init generation ID.")
         if final_image_url and final_generation_id:
-            raise ValueError("Cannot provide both a final image and a final generation")
+            raise ValueError("Cannot provide both a final image and a final generation ID.")
 
+        # Auth
         luma_api_key = get_luma_api_key(api_key)
         client = LumaAI(auth_token=luma_api_key)
 
+        # Build keyframes
         kf = {}
         if init_image_url:
             kf["frame0"] = {"type": "image", "url": init_image_url}
@@ -340,9 +372,18 @@ class Playbook_ExtendGeneration:
         if final_generation_id:
             kf["frame1"] = {"type": "generation", "id": final_generation_id}
 
-        g = client.generations.create(prompt=prompt, keyframes=kf)
+        # Create Ray2 extended generation
+        print("Debug: Creating Ray2 extension video")
+        g = client.generations.create(
+            prompt=prompt,
+            model="ray-2",
+            keyframes=kf,
+            duration=duration,
+            resolution=resolution,
+        )
         gen_id = g.id
 
+        print(f"Debug: Waiting for Ray2 extension {gen_id}")
         while True:
             g = client.generations.get(id=gen_id)
             if g.state == "completed":
@@ -351,8 +392,11 @@ class Playbook_ExtendGeneration:
                 raise ValueError(f"Generation failed: {g.failure_reason}")
             time.sleep(3)
 
+        # Download
         video_url = g.assets.video
         temp_path = download_video_to_temp(video_url)
+
+        # Optionally save
         if save:
             out_dir = folder_paths.get_output_directory()
             if not os.path.exists(out_dir):
@@ -361,14 +405,21 @@ class Playbook_ExtendGeneration:
             final_path = os.path.join(out_dir, f"{name}.mp4")
             os.rename(temp_path, final_path)
             temp_path = final_path
+            print(f"Debug: Saved Ray2 extension video to {final_path}")
 
+        # Convert to frames
         images = video_to_images(temp_path)
         if not images:
-            raise ValueError("Error: No images extracted.")
+            raise ValueError("Error: No frames extracted from Ray2 extension.")
 
         return (images,)
 
-class Playbook_PreviewVideo:
+
+class Playbook_Ray2PreviewVideo:
+    """
+    Same as the existing Playbook_PreviewVideo, but named for Ray2 usage.
+    Exposes the video in ComfyUI's UI without returning frames.
+    """
     @classmethod
     def INPUT_TYPES(cls):
         return {
