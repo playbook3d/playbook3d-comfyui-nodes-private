@@ -9,7 +9,6 @@ from .lumaDreamMachineNode import (
 
 from .playbook_luma_ray2 import (
     Playbook_Ray2Text2Video,
-    Playbook_Ray2Image2Video,
     Playbook_Ray2InterpolateGenerations,
     Playbook_Ray2ExtendGeneration,
     Playbook_Ray2PreviewVideo,
@@ -29,7 +28,6 @@ NODE_CLASS_MAPPINGS = {
     "Playbook ExtendGeneration": Playbook_ExtendGeneration,
     "Playbook PreviewVideo": Playbook_PreviewVideo,
     "Playbook Ray2Text2Video": Playbook_Ray2Text2Video,
-    "Playbook Ray2Image2Video": Playbook_Ray2Image2Video,
     "Playbook Ray2InterpolateGenerations": Playbook_Ray2InterpolateGenerations,
     "Playbook Ray2ExtendGeneration": Playbook_Ray2ExtendGeneration,
     "Playbook Ray2PreviewVideo": Playbook_Ray2PreviewVideo,
@@ -45,8 +43,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Playbook InterpolateGenerations": "Playbook Dream Machine Interpolate Generations",
     "Playbook ExtendGeneration": "Playbook Dream Machine Extend Generation",
     "Playbook PreviewVideo": "Playbook Dream Machine Preview Video",
-    "Playbook Ray2Text2Video": "Playbook Ray2 Text to Video)",
-    "Playbook Ray2Image2Video": "Playbook Ray2 Image to Video",
+    "Playbook Ray2Text2Video": "Playbook Ray2 Text to Video",
     "Playbook Ray2InterpolateGenerations": "Playbook Ray2 Interpolate",
     "Playbook Ray2ExtendGeneration": "Playbook Ray2 Extend",
     "Playbook Ray2PreviewVideo": "Playbook Ray2 Preview",
