@@ -42,7 +42,7 @@ class Playbook_PhotonText2Image:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("STRING", {"multiline": False}),
+                "luma_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "aspect_ratio": ("STRING", {"default": "1:1"}),
                 "save": ("BOOLEAN", {"default": True}),
@@ -67,13 +67,13 @@ class Playbook_PhotonText2Image:
         except ValueError:
             raise ValueError("Invalid aspect_ratio format. Must be 'W:H' with positive integers.")
 
-    def run(self, api_key, prompt, aspect_ratio, save, filename=""):
+    def run(self, luma_api_key, prompt, aspect_ratio, save, filename=""):
         if not prompt:
             raise ValueError("Prompt is required")
         self.validate_aspect_ratio(aspect_ratio)
 
         # Use the Luma API Key directly
-        client = LumaAI(auth_token=api_key)
+        client = LumaAI(auth_token=luma_api_key)
 
         print(f"Debug: Creating Photon image from prompt: {prompt}")
         # Create the image generation
@@ -127,7 +127,7 @@ class Playbook_PhotonModifyImage:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("STRING", {"multiline": False}),
+                "luma_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "modify_image_url": ("STRING", {"forceInput": True}),
                 "save": ("BOOLEAN", {"default": True}),
@@ -142,14 +142,14 @@ class Playbook_PhotonModifyImage:
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
 
-    def run(self, api_key, prompt, modify_image_url, save, filename=""):
+    def run(self, luma_api_key, prompt, modify_image_url, save, filename=""):
         if not prompt:
             raise ValueError("Prompt is required")
         if not modify_image_url:
             raise ValueError("Must provide a URL for the image to modify")
 
         # Directly pass user Luma Key
-        client = LumaAI(auth_token=api_key)
+        client = LumaAI(auth_token=luma_api_key)
 
         print(f"Debug: Modifying image with Photon, prompt: {prompt}")
         generation = client.generations.image.create(

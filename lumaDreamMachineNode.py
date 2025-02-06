@@ -50,7 +50,7 @@ class Playbook_LumaAIClient:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("STRING", {"multiline": False})
+                "luma_api_key": ("STRING", {"multiline": False})
             }
         }
 
@@ -59,9 +59,9 @@ class Playbook_LumaAIClient:
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
 
-    def run(self, api_key):
+    def run(self, luma_api_key):
         # Directly use the user-provided Luma key
-        client = LumaAI(auth_token=api_key)
+        client = LumaAI(auth_token=luma_api_key)
         return (client,)
 
 
@@ -70,7 +70,7 @@ class Playbook_Text2Video:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("STRING", {"multiline": False}),
+                "luma_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "loop": ("BOOLEAN", {"default": False}),
                 "aspect_ratio": ("STRING", {"default": "16:9", "multiline": False}),
@@ -94,12 +94,12 @@ class Playbook_Text2Video:
         except ValueError:
             raise ValueError("Invalid aspect ratio format. Must be two positive numbers separated by ':' (e.g., '16:9')")
 
-    def run(self, api_key, prompt, loop, aspect_ratio, save, filename):
+    def run(self, luma_api_key, prompt, loop, aspect_ratio, save, filename):
         if not prompt:
             raise ValueError("Prompt is required")
         
         self.validate_aspect_ratio(aspect_ratio)
-        client = LumaAI(auth_token=api_key)
+        client = LumaAI(auth_token=luma_api_key)
 
         print(f"Debug: Creating generation with prompt: {prompt}")
         g = client.generations.create(prompt=prompt, loop=loop, aspect_ratio=aspect_ratio)
@@ -141,7 +141,7 @@ class Playbook_Image2Video:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("STRING", {"multiline": False}),
+                "luma_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "loop": ("BOOLEAN", {"default": False}),
                 "save": ("BOOLEAN", {"default": True}),
@@ -158,11 +158,11 @@ class Playbook_Image2Video:
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
 
-    def run(self, api_key, prompt, loop, save, init_image_url="", final_image_url="", filename=""):
+    def run(self, luma_api_key, prompt, loop, save, init_image_url="", final_image_url="", filename=""):
         if not init_image_url and not final_image_url:
             raise ValueError("At least one image URL is required")
 
-        client = LumaAI(auth_token=api_key)
+        client = LumaAI(auth_token=luma_api_key)
 
         keyframes = {}
         if init_image_url:
@@ -205,7 +205,7 @@ class Playbook_InterpolateGenerations:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("STRING", {"multiline": False}),
+                "luma_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "save": ("BOOLEAN", {"default": True}),
                 "generation_id_1": ("STRING", {"default": "", "forceInput": True}),
@@ -219,11 +219,11 @@ class Playbook_InterpolateGenerations:
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
 
-    def run(self, api_key, prompt, save, generation_id_1, generation_id_2, filename=""):
+    def run(self, luma_api_key, prompt, save, generation_id_1, generation_id_2, filename=""):
         if not generation_id_1 or not generation_id_2:
             raise ValueError("Both generation IDs are required")
 
-        client = LumaAI(auth_token=api_key)
+        client = LumaAI(auth_token=luma_api_key)
 
         kf = {
             "frame0": {"type": "generation", "id": generation_id_1},
@@ -265,7 +265,7 @@ class Playbook_ExtendGeneration:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("STRING", {"multiline": False}),
+                "luma_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "save": ("BOOLEAN", {"default": True}),
             },
@@ -285,7 +285,7 @@ class Playbook_ExtendGeneration:
 
     def run(
         self,
-        api_key,
+        luma_api_key,
         prompt,
         save,
         init_image_url="",
@@ -301,7 +301,7 @@ class Playbook_ExtendGeneration:
         if final_image_url and final_generation_id:
             raise ValueError("Cannot provide both a final image and a final generation")
 
-        client = LumaAI(auth_token=api_key)
+        client = LumaAI(auth_token=luma_api_key)
 
         kf = {}
         if init_image_url:

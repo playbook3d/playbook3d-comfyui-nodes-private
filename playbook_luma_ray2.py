@@ -17,7 +17,7 @@ class Playbook_Ray2Text2Video:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("STRING", {"multiline": False}),
+                "luma_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "loop": ("BOOLEAN", {"default": False}),
                 "aspect_ratio": ("STRING", {"default": "16:9"}),
@@ -47,7 +47,7 @@ class Playbook_Ray2Text2Video:
 
     def run(
         self,
-        api_key,
+        luma_api_key,
         prompt,
         loop,
         aspect_ratio,
@@ -63,7 +63,7 @@ class Playbook_Ray2Text2Video:
         self.validate_aspect_ratio(aspect_ratio)
 
         # Create Luma client directly with the user-provided key
-        client = LumaAI(auth_token=api_key)
+        client = LumaAI(auth_token=luma_api_key)
 
         print(f"Debug: Creating Ray2 video from text prompt: {prompt}")
         generation = client.generations.create(
@@ -121,7 +121,7 @@ class Playbook_Ray2Image2Video:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("STRING", {"multiline": False}),
+                "luma_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "loop": ("BOOLEAN", {"default": False}),
                 "duration": ("STRING", {"default": "5s"}),
@@ -142,7 +142,7 @@ class Playbook_Ray2Image2Video:
 
     def run(
         self,
-        api_key,
+        luma_api_key,
         prompt,
         loop,
         duration,
@@ -156,7 +156,7 @@ class Playbook_Ray2Image2Video:
             raise ValueError("At least one image URL (init or final) is required.")
 
         # Create Luma client
-        client = LumaAI(auth_token=api_key)
+        client = LumaAI(auth_token=luma_api_key)
 
         # Build keyframes
         keyframes = {}
@@ -220,7 +220,7 @@ class Playbook_Ray2InterpolateGenerations:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("STRING", {"multiline": False}),
+                "luma_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "duration": ("STRING", {"default": "5s"}),
                 "resolution": ("STRING", {"default": "540p"}),
@@ -240,7 +240,7 @@ class Playbook_Ray2InterpolateGenerations:
 
     def run(
         self,
-        api_key,
+        luma_api_key,
         prompt,
         duration,
         resolution,
@@ -253,7 +253,7 @@ class Playbook_Ray2InterpolateGenerations:
             raise ValueError("Both generation_id_1 and generation_id_2 are required.")
 
         # Create Luma client
-        client = LumaAI(auth_token=api_key)
+        client = LumaAI(auth_token=luma_api_key)
 
         # Keyframes referencing previous generations
         kf = {
@@ -315,7 +315,7 @@ class Playbook_Ray2ExtendGeneration:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("STRING", {"multiline": False}),
+                "luma_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "duration": ("STRING", {"default": "5s"}),
                 "resolution": ("STRING", {"default": "540p"}),
@@ -337,7 +337,7 @@ class Playbook_Ray2ExtendGeneration:
 
     def run(
         self,
-        api_key,
+        luma_api_key,
         prompt,
         duration,
         resolution,
@@ -356,7 +356,7 @@ class Playbook_Ray2ExtendGeneration:
             raise ValueError("Cannot provide both a final image and a final generation ID.")
 
         # Create Luma client
-        client = LumaAI(auth_token=api_key)
+        client = LumaAI(auth_token=luma_api_key)
 
         # Build keyframes
         kf = {}
