@@ -363,6 +363,7 @@ class Playbook_ExtendGeneration:
         return {
             "required": {
                 "luma_api_key": ("STRING", {"multiline": False}),
+                "api_key": ("STRING", {"multiline": False}),  # Need to add this too for S3 upload
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
             },
             "optional": {
@@ -370,6 +371,7 @@ class Playbook_ExtendGeneration:
                 "final_image": ("IMAGE", {"forceInput": True}),
                 "init_generation_id": ("STRING", {"default": "", "forceInput": True}),
                 "final_generation_id": ("STRING", {"default": "", "forceInput": True}),
+                "run_id": ("STRING", {"default": ""})  # Added this
             },
         }
 
@@ -378,36 +380,95 @@ class Playbook_ExtendGeneration:
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
 
+    def upload_image_to_s3(self, image_tensor, api_key, run_id, node_id):
+        """
+        Upload image tensor to Playbook S3 and return the signed URL
+        """
+        try:
+            # First get JWT using playbook key
+            jwt_token = get_jwt_from_playbook_key(api_key)
+            
+            print(f"Debug - Got JWT token successfully")
+            
+            # Convert tensor to PNG bytes
+            if image_tensor.dim() == 4 and image_tensor.shape[0] == 1:
+                image_tensor = image_tensor.squeeze(0)
+            
+            arr = (image_tensor.cpu().numpy().clip(0, 1) * 255).astype(np.uint8)
+            img = PILImage.fromarray(arr)
+            
+            img_byte_arr = io.BytesIO()
+            img.save(img_byte_arr, format='PNG')
+            img_byte_arr.seek(0)
+            
+            # Prepare multipart form data
+            files = {
+                'file': ('image.png', img_byte_arr, 'image/png')
+            }
+            
+            # Upload to Playbook endpoint using JWT
+            upload_path = f"{run_id}/{node_id}" if run_id else node_id
+            url = f"https://accounts.playbook3d.com/upload-assets/{upload_path}"
+            headers = {
+                "Authorization": f"Bearer {jwt_token}"
+            }
+            
+            print(f"Debug - Uploading to URL: {url}")
+            response = requests.post(url, files=files, headers=headers)
+            print(f"Debug - Upload response status: {response.status_code}")
+            
+            if response.status_code != 201:
+                raise ValueError(f"Failed to upload image. Status: {response.status_code}\nResponse: {response.text}")
+            
+            # Extract and return the S3 URL from response
+            result = response.json()
+            return result['url']
+            
+        except Exception as e:
+            print(f"Debug - Exception type: {type(e)}")
+            print(f"Debug - Exception details: {str(e)}")
+            raise
+
     def run(
         self,
         luma_api_key,
+        api_key,
         prompt,
         init_image=None,
         final_image=None,
         init_generation_id="",
         final_generation_id="",
+        run_id=""
     ):
         """
         Extend from an init image/generation to a final image/generation. Returns frames as 4D tensor.
         """
-        # Must supply at least one side; can't supply both (image + generation) for the same side.
-        if not (init_image or init_generation_id or final_image or final_generation_id):
+        # Check presence of required inputs differently
+        has_init = init_image is not None or bool(init_generation_id)
+        has_final = final_image is not None or bool(final_generation_id)
+        
+        if not (has_init or has_final):
             raise ValueError("You must provide at least one side of extension (init/final).")
+        
+        # Check for conflicts
         if init_image is not None and init_generation_id:
             raise ValueError("Cannot provide both an init image and an init generation ID.")
         if final_image is not None and final_generation_id:
             raise ValueError("Cannot provide both a final image and a final generation ID.")
 
+        node_id = "dreammachinenode"
         client = LumaAI(auth_token=luma_api_key)
 
         kf = {}
         if init_image is not None:
-            kf["frame0"] = {"type": "image", "url": image_to_temp_url(init_image)}
+            init_url = self.upload_image_to_s3(init_image, api_key, run_id, node_id)
+            kf["frame0"] = {"type": "image", "url": init_url}
         elif init_generation_id:
             kf["frame0"] = {"type": "generation", "id": init_generation_id}
 
         if final_image is not None:
-            kf["frame1"] = {"type": "image", "url": image_to_temp_url(final_image)}
+            final_url = self.upload_image_to_s3(final_image, api_key, run_id, node_id)
+            kf["frame1"] = {"type": "image", "url": final_url}
         elif final_generation_id:
             kf["frame1"] = {"type": "generation", "id": final_generation_id}
 
