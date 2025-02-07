@@ -3,13 +3,18 @@ import time
 import cv2
 import requests
 import tempfile
+import torch
+import numpy as np
 from PIL import Image
 from lumaai import LumaAI
 import folder_paths
-import torch
-import numpy as np
+import io
+from PIL import Image as PILImage
 
 def download_video_to_temp(video_url):
+    """
+    Download the .mp4 from video_url to a local temp file and return that file's path.
+    """
     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video:
         r = requests.get(video_url, stream=True)
         for chunk in r.iter_content(chunk_size=8192):
@@ -17,7 +22,11 @@ def download_video_to_temp(video_url):
                 temp_video.write(chunk)
         return temp_video.name
 
+
 def video_to_images(path):
+    """
+    Convert the .mp4 at path into a 4D PyTorch tensor of frames: [num_frames, height, width, 3].
+    """
     images = []
     cap = cv2.VideoCapture(path)
     print("Debug: Starting video to frames conversion")
@@ -26,11 +35,9 @@ def video_to_images(path):
         ret, frame = cap.read()
         if not ret:
             break
-            
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame = frame.astype(np.float32) / 255.0
         frame_tensor = torch.from_numpy(frame)
-        
         images.append(frame_tensor)
         
     cap.release()
@@ -43,6 +50,28 @@ def video_to_images(path):
     print(f"Debug: Final tensor dtype: {frames.dtype}")
     
     return frames
+
+
+def image_to_temp_url(image_tensor):
+    """
+    Placeholder: Takes a ComfyUI 'IMAGE' PyTorch tensor, writes it to disk as PNG, returns a 'file://' URL.
+    In a real environment, you'd upload to S3 or an image host and return a real https:// URL.
+    """
+    import numpy as np
+    from PIL import Image as PILImage
+
+    # Ensure we have [H, W, C] shape if there's a batch dim [1, H, W, C].
+    if image_tensor.dim() == 4 and image_tensor.shape[0] == 1:
+        image_tensor = image_tensor.squeeze(0)
+
+    # Clip to [0, 1], scale to [0..255], convert to uint8
+    arr = (image_tensor.cpu().numpy().clip(0, 1) * 255).astype(np.uint8)
+    
+    temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+    PILImage.fromarray(arr).save(temp_file.name)
+    temp_file.close()
+
+    return f"file://{temp_file.name}"
 
 
 class Playbook_LumaAIClient:
@@ -60,7 +89,9 @@ class Playbook_LumaAIClient:
     CATEGORY = "Playbook 3D"
 
     def run(self, luma_api_key):
-        # Directly use the user-provided Luma key
+        """
+        Create a LumaAI client directly with the user-provided Luma key.
+        """
         client = LumaAI(auth_token=luma_api_key)
         return (client,)
 
@@ -74,9 +105,7 @@ class Playbook_Text2Video:
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "loop": ("BOOLEAN", {"default": False}),
                 "aspect_ratio": ("STRING", {"default": "16:9", "multiline": False}),
-                "save": ("BOOLEAN", {"default": True}),
-            },
-            "optional": {"filename": ("STRING", {"default": ""})},
+            }
         }
 
     RETURN_TYPES = ("IMAGE",)
@@ -92,9 +121,14 @@ class Playbook_Text2Video:
                 raise ValueError("Aspect ratio values must be positive numbers")
             return True
         except ValueError:
-            raise ValueError("Invalid aspect ratio format. Must be two positive numbers separated by ':' (e.g., '16:9')")
+            raise ValueError(
+                "Invalid aspect ratio format. Must be 'W:H' (e.g., '16:9') with positive integers."
+            )
 
-    def run(self, luma_api_key, prompt, loop, aspect_ratio, save, filename):
+    def run(self, luma_api_key, prompt, loop, aspect_ratio):
+        """
+        Generate a video from a text prompt, return frames as a 4D tensor.
+        """
         if not prompt:
             raise ValueError("Prompt is required")
         
@@ -117,17 +151,8 @@ class Playbook_Text2Video:
         print("Debug: Generation completed")
         video_url = g.assets.video
         temp_path = download_video_to_temp(video_url)
-        
-        if save:
-            out_dir = folder_paths.get_output_directory()
-            if not os.path.exists(out_dir):
-                os.makedirs(out_dir)
-            name = filename or gen_id
-            final_path = os.path.join(out_dir, f"{name}.mp4")
-            os.rename(temp_path, final_path)
-            temp_path = final_path
-            print(f"Debug: Saved video to {final_path}")
 
+        # Convert .mp4 to frames
         print("Debug: Converting video to images")
         images = video_to_images(temp_path)
         if images is None:
@@ -136,20 +161,44 @@ class Playbook_Text2Video:
         return (images,)
 
 
+def get_jwt_from_playbook_key(api_key: str) -> str:
+        """Get JWT access token from Playbook API key"""
+        url = f"https://accounts.playbook3d.com/token-wrapper/get-tokens/{api_key}"
+        response = requests.get(url)
+        
+        if response.status_code != 200:
+            raise ValueError(f"Failed to get JWT token. Status: {response.status_code}")
+            
+        data = response.json()
+        return data.get('access_token')
+        
+
+def get_run_id() -> str:
+    """Get a unique run ID from Playbook API"""
+    url = "https://api.playbook3d.com/get_run_id"
+    response = requests.get(url)
+    
+    if response.status_code != 200:
+        raise ValueError(f"Failed to get run ID. Status: {response.status_code}")
+        
+    data = response.json()
+    return data.get('run_id')
+
+
 class Playbook_Image2Video:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "luma_api_key": ("STRING", {"multiline": False}),
+                "api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "loop": ("BOOLEAN", {"default": False}),
-                "save": ("BOOLEAN", {"default": True}),
             },
             "optional": {
-                "init_image_url": ("STRING", {"default": "", "forceInput": True}),
-                "final_image_url": ("STRING", {"default": "", "forceInput": True}),
-                "filename": ("STRING", {"default": ""}),
+                "init_image": ("IMAGE", {"forceInput": True}),
+                "final_image": ("IMAGE", {"forceInput": True}),
+                "run_id": ("STRING", {"default": ""})  # Added this
             },
         }
 
@@ -158,17 +207,79 @@ class Playbook_Image2Video:
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
 
-    def run(self, luma_api_key, prompt, loop, save, init_image_url="", final_image_url="", filename=""):
-        if not init_image_url and not final_image_url:
-            raise ValueError("At least one image URL is required")
+
+    def upload_image_to_s3(self, image_tensor, api_key, run_id, node_id):
+        """
+        Upload image tensor to Playbook S3 and return the signed URL
+        """
+        try:
+            # First get JWT using playbook key
+            jwt_token = get_jwt_from_playbook_key(api_key)
+            
+            print(f"Debug - Got JWT token successfully")
+            
+            # Convert tensor to PNG bytes
+            if image_tensor.dim() == 4 and image_tensor.shape[0] == 1:
+                image_tensor = image_tensor.squeeze(0)
+            
+            arr = (image_tensor.cpu().numpy().clip(0, 1) * 255).astype(np.uint8)
+            img = PILImage.fromarray(arr)
+            
+            img_byte_arr = io.BytesIO()
+            img.save(img_byte_arr, format='PNG')
+            img_byte_arr.seek(0)
+            
+            # Prepare multipart form data
+            files = {
+                'file': ('image.png', img_byte_arr, 'image/png')
+            }
+            
+            # Upload to Playbook endpoint using JWT
+            upload_path = f"{run_id}/{node_id}" if run_id else node_id
+            url = f"https://accounts.playbook3d.com/upload-assets/{upload_path}"
+            headers = {
+                "Authorization": f"Bearer {jwt_token}"
+            }
+            
+            print(f"Debug - Uploading to URL: {url}")
+            response = requests.post(url, files=files, headers=headers)
+            print(f"Debug - Upload response status: {response.status_code}")
+            
+            if response.status_code != 201:  # Note: Changed to 201 as that's what we saw in successful Postman response
+                raise ValueError(f"Failed to upload image. Status: {response.status_code}\nResponse: {response.text}")
+            
+            # Extract and return the S3 URL from response
+            result = response.json()
+            return result['url']
+            
+        except Exception as e:
+            print(f"Debug - Exception type: {type(e)}")
+            print(f"Debug - Exception details: {str(e)}")
+            raise
+    
+    
+
+    def run(self, luma_api_key, api_key, prompt, loop, init_image=None, final_image=None, run_id=""):
+        """
+        Generate a video from one or two ComfyUI images plus a text prompt. 
+        Returns frames as a 4D tensor.
+        """
+        if init_image is None and final_image is None:
+            raise ValueError("At least one image is required (init or final).")
+
+        node_id = "dreammachinenode"
+        print(f"Debug - Using node ID: {node_id}")
 
         client = LumaAI(auth_token=luma_api_key)
 
+        # Upload images to S3 and get signed URLs
         keyframes = {}
-        if init_image_url:
-            keyframes["frame0"] = {"type": "image", "url": init_image_url}
-        if final_image_url:
-            keyframes["frame1"] = {"type": "image", "url": final_image_url}
+        if init_image is not None:
+            init_url = self.upload_image_to_s3(init_image, api_key, run_id, node_id)
+            keyframes["frame0"] = {"type": "image", "url": init_url}
+        if final_image is not None:
+            final_url = self.upload_image_to_s3(final_image, api_key, run_id, node_id)
+            keyframes["frame1"] = {"type": "image", "url": final_url}
 
         g = client.generations.create(prompt=prompt, loop=loop, keyframes=keyframes)
         gen_id = g.id
@@ -183,22 +294,12 @@ class Playbook_Image2Video:
 
         video_url = g.assets.video
         temp_path = download_video_to_temp(video_url)
-        
-        if save:
-            out_dir = folder_paths.get_output_directory()
-            if not os.path.exists(out_dir):
-                os.makedirs(out_dir)
-            name = filename or gen_id
-            final_path = os.path.join(out_dir, f"{name}.mp4")
-            os.rename(temp_path, final_path)
-            temp_path = final_path
 
         images = video_to_images(temp_path)
         if images is None:
             raise ValueError("Error: No frames extracted.")
 
         return (images,)
-
 
 class Playbook_InterpolateGenerations:
     @classmethod
@@ -207,11 +308,9 @@ class Playbook_InterpolateGenerations:
             "required": {
                 "luma_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
-                "save": ("BOOLEAN", {"default": True}),
                 "generation_id_1": ("STRING", {"default": "", "forceInput": True}),
                 "generation_id_2": ("STRING", {"default": "", "forceInput": True}),
             },
-            "optional": {"filename": ("STRING", {"default": ""})},
         }
 
     RETURN_TYPES = ("IMAGE",)
@@ -219,7 +318,11 @@ class Playbook_InterpolateGenerations:
     FUNCTION = "run"
     CATEGORY = "Playbook 3D"
 
-    def run(self, luma_api_key, prompt, save, generation_id_1, generation_id_2, filename=""):
+    def run(self, luma_api_key, prompt, generation_id_1, generation_id_2):
+        """
+        Generate a video by interpolating between two existing generation IDs.
+        Returns frames as a 4D tensor.
+        """
         if not generation_id_1 or not generation_id_2:
             raise ValueError("Both generation IDs are required")
 
@@ -243,15 +346,6 @@ class Playbook_InterpolateGenerations:
 
         video_url = g.assets.video
         temp_path = download_video_to_temp(video_url)
-        
-        if save:
-            out_dir = folder_paths.get_output_directory()
-            if not os.path.exists(out_dir):
-                os.makedirs(out_dir)
-            name = filename or gen_id
-            final_path = os.path.join(out_dir, f"{name}.mp4")
-            os.rename(temp_path, final_path)
-            temp_path = final_path
 
         images = video_to_images(temp_path)
         if images is None:
@@ -261,20 +355,21 @@ class Playbook_InterpolateGenerations:
 
 
 class Playbook_ExtendGeneration:
+    """
+    Accept init_image and final_image as 'IMAGE' inputs, or generation IDs. 
+    """
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "luma_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
-                "save": ("BOOLEAN", {"default": True}),
             },
             "optional": {
-                "init_image_url": ("STRING", {"default": "", "forceInput": True}),
-                "final_image_url": ("STRING", {"default": "", "forceInput": True}),
+                "init_image": ("IMAGE", {"forceInput": True}),
+                "final_image": ("IMAGE", {"forceInput": True}),
                 "init_generation_id": ("STRING", {"default": "", "forceInput": True}),
                 "final_generation_id": ("STRING", {"default": "", "forceInput": True}),
-                "filename": ("STRING", {"default": ""}),
             },
         }
 
@@ -287,30 +382,33 @@ class Playbook_ExtendGeneration:
         self,
         luma_api_key,
         prompt,
-        save,
-        init_image_url="",
-        final_image_url="",
+        init_image=None,
+        final_image=None,
         init_generation_id="",
         final_generation_id="",
-        filename="",
     ):
-        if not init_generation_id and not final_generation_id:
-            raise ValueError("You must provide at least one generation id")
-        if init_image_url and init_generation_id:
-            raise ValueError("Cannot provide both an init image and an init generation")
-        if final_image_url and final_generation_id:
-            raise ValueError("Cannot provide both a final image and a final generation")
+        """
+        Extend from an init image/generation to a final image/generation. Returns frames as 4D tensor.
+        """
+        # Must supply at least one side; can't supply both (image + generation) for the same side.
+        if not (init_image or init_generation_id or final_image or final_generation_id):
+            raise ValueError("You must provide at least one side of extension (init/final).")
+        if init_image is not None and init_generation_id:
+            raise ValueError("Cannot provide both an init image and an init generation ID.")
+        if final_image is not None and final_generation_id:
+            raise ValueError("Cannot provide both a final image and a final generation ID.")
 
         client = LumaAI(auth_token=luma_api_key)
 
         kf = {}
-        if init_image_url:
-            kf["frame0"] = {"type": "image", "url": init_image_url}
-        if final_image_url:
-            kf["frame1"] = {"type": "image", "url": final_image_url}
-        if init_generation_id:
+        if init_image is not None:
+            kf["frame0"] = {"type": "image", "url": image_to_temp_url(init_image)}
+        elif init_generation_id:
             kf["frame0"] = {"type": "generation", "id": init_generation_id}
-        if final_generation_id:
+
+        if final_image is not None:
+            kf["frame1"] = {"type": "image", "url": image_to_temp_url(final_image)}
+        elif final_generation_id:
             kf["frame1"] = {"type": "generation", "id": final_generation_id}
 
         g = client.generations.create(prompt=prompt, keyframes=kf)
@@ -326,15 +424,6 @@ class Playbook_ExtendGeneration:
 
         video_url = g.assets.video
         temp_path = download_video_to_temp(video_url)
-        
-        if save:
-            out_dir = folder_paths.get_output_directory()
-            if not os.path.exists(out_dir):
-                os.makedirs(out_dir)
-            name = filename or gen_id
-            final_path = os.path.join(out_dir, f"{name}.mp4")
-            os.rename(temp_path, final_path)
-            temp_path = final_path
 
         images = video_to_images(temp_path)
         if images is None:
@@ -358,4 +447,7 @@ class Playbook_PreviewVideo:
     OUTPUT_NODE = True
 
     def run(self, video_url):
+        """
+        Return a UI payload to preview the video in ComfyUI's interface.
+        """
         return {"ui": {"video_url": [video_url]}}
