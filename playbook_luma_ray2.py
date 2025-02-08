@@ -22,6 +22,19 @@ def get_jwt_from_playbook_key(api_key: str) -> str:
         data = response.json()
         return data.get('access_token')
 
+def validate_luma_api_key(api_key):
+    """
+    Validates that a Luma API key is properly formatted.
+    Returns True if valid, raises ValueError if invalid.
+    """
+    if not api_key:
+        raise ValueError("Luma API key is required")
+    if not isinstance(api_key, str):
+        raise ValueError("Luma API key must be a string")
+    if not api_key.startswith("luma"):
+        raise ValueError("Invalid Luma API key format. API key must start with 'luma'")
+    return True
+
 class Playbook_Ray2Text2Video:
     """
     Create a new video from a text prompt using the Ray 2 model.
@@ -94,6 +107,8 @@ class Playbook_Ray2Text2Video:
     ):
         if not prompt:
             raise ValueError("Prompt is required.")
+        
+        validate_luma_api_key(luma_api_key)
 
         # Validate aspect ratio
         self.validate_aspect_ratio(aspect_ratio)
