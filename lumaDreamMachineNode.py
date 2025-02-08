@@ -73,6 +73,18 @@ def image_to_temp_url(image_tensor):
 
     return f"file://{temp_file.name}"
 
+def validate_luma_api_key(api_key):
+    """
+    Validates that a Luma API key is properly formatted.
+    Returns True if valid, raises ValueError if invalid.
+    """
+    if not api_key:
+        raise ValueError("Luma API key is required")
+    if not isinstance(api_key, str):
+        raise ValueError("Luma API key must be a string")
+    if not api_key.startswith("luma"):
+        raise ValueError("Invalid Luma API key format. API key must start with 'luma'")
+    return True
 
 class Playbook_LumaAIClient:
     @classmethod
@@ -131,6 +143,8 @@ class Playbook_Text2Video:
         """
         if not prompt:
             raise ValueError("Prompt is required")
+        
+        validate_luma_api_key(luma_api_key)
         
         self.validate_aspect_ratio(aspect_ratio)
         client = LumaAI(auth_token=luma_api_key)
@@ -210,14 +224,25 @@ class Playbook_Image2Video:
 
     def upload_image_to_s3(self, image_tensor, api_key, run_id, node_id):
         """
-        Upload image tensor to Playbook S3 and return the signed URL
+        Upload image tensor to Playbook S3 and return the signed URL.
+        Uses provided run_id if available, otherwise fetches one from the API.
         """
         try:
             # First get JWT using playbook key
             jwt_token = get_jwt_from_playbook_key(api_key)
-            
             print(f"Debug - Got JWT token successfully")
             
+            # Get run_id from API if not provided
+            if not run_id:
+                url = "https://api.playbook3d.com/get_run_id"
+                response = requests.get(url)
+                if response.status_code != 200:
+                    raise ValueError(f"Failed to get run ID. Status: {response.status_code}")
+                run_id = response.json().get('run_id')
+                print(f"Debug - Using fallback run ID: {run_id}")
+            else:
+                print(f"Debug - Using provided run ID: {run_id}")
+                
             # Convert tensor to PNG bytes
             if image_tensor.dim() == 4 and image_tensor.shape[0] == 1:
                 image_tensor = image_tensor.squeeze(0)
@@ -234,8 +259,8 @@ class Playbook_Image2Video:
                 'file': ('image.png', img_byte_arr, 'image/png')
             }
             
-            # Upload to Playbook endpoint using JWT
-            upload_path = f"{run_id}/{node_id}" if run_id else node_id
+            # Use run_id in path (either provided or fetched)
+            upload_path = f"{run_id}/{node_id}"
             url = f"https://accounts.playbook3d.com/upload-assets/{upload_path}"
             headers = {
                 "Authorization": f"Bearer {jwt_token}"
@@ -245,7 +270,7 @@ class Playbook_Image2Video:
             response = requests.post(url, files=files, headers=headers)
             print(f"Debug - Upload response status: {response.status_code}")
             
-            if response.status_code != 201:  # Note: Changed to 201 as that's what we saw in successful Postman response
+            if response.status_code != 201:
                 raise ValueError(f"Failed to upload image. Status: {response.status_code}\nResponse: {response.text}")
             
             # Extract and return the S3 URL from response
@@ -266,6 +291,8 @@ class Playbook_Image2Video:
         """
         if init_image is None and final_image is None:
             raise ValueError("At least one image is required (init or final).")
+        
+        validate_luma_api_key(luma_api_key)
 
         node_id = "dreammachinenode"
         print(f"Debug - Using node ID: {node_id}")
@@ -382,14 +409,25 @@ class Playbook_ExtendGeneration:
 
     def upload_image_to_s3(self, image_tensor, api_key, run_id, node_id):
         """
-        Upload image tensor to Playbook S3 and return the signed URL
+        Upload image tensor to Playbook S3 and return the signed URL.
+        Uses provided run_id if available, otherwise fetches one from the API.
         """
         try:
             # First get JWT using playbook key
             jwt_token = get_jwt_from_playbook_key(api_key)
-            
             print(f"Debug - Got JWT token successfully")
             
+            # Get run_id from API if not provided
+            if not run_id:
+                url = "https://api.playbook3d.com/get_run_id"
+                response = requests.get(url)
+                if response.status_code != 200:
+                    raise ValueError(f"Failed to get run ID. Status: {response.status_code}")
+                run_id = response.json().get('run_id')
+                print(f"Debug - Using fallback run ID: {run_id}")
+            else:
+                print(f"Debug - Using provided run ID: {run_id}")
+                
             # Convert tensor to PNG bytes
             if image_tensor.dim() == 4 and image_tensor.shape[0] == 1:
                 image_tensor = image_tensor.squeeze(0)
@@ -406,8 +444,8 @@ class Playbook_ExtendGeneration:
                 'file': ('image.png', img_byte_arr, 'image/png')
             }
             
-            # Upload to Playbook endpoint using JWT
-            upload_path = f"{run_id}/{node_id}" if run_id else node_id
+            # Use run_id in path (either provided or fetched)
+            upload_path = f"{run_id}/{node_id}"
             url = f"https://accounts.playbook3d.com/upload-assets/{upload_path}"
             headers = {
                 "Authorization": f"Bearer {jwt_token}"

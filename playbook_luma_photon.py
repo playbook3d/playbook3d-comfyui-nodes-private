@@ -30,6 +30,17 @@ def upload_image_to_s3(image_tensor, api_key, run_id=""):
         
         print(f"Debug - Got JWT token successfully")
         
+        # Get run_id from API if not provided
+        if not run_id:
+            url = "https://api.playbook3d.com/get_run_id"
+            response = requests.get(url)
+            if response.status_code != 200:
+                raise ValueError(f"Failed to get run ID. Status: {response.status_code}")
+            run_id = response.json().get('run_id')
+            print(f"Debug - Using fallback run ID: {run_id}")
+        else:
+            print(f"Debug - Using provided run ID: {run_id}")
+        
         # Convert tensor to PNG bytes
         if image_tensor.dim() == 4 and image_tensor.shape[0] == 1:
             image_tensor = image_tensor.squeeze(0)
@@ -46,8 +57,8 @@ def upload_image_to_s3(image_tensor, api_key, run_id=""):
             'file': ('image.png', img_byte_arr, 'image/png')
         }
         
-        # Use run_id in path if provided
-        upload_path = f"{run_id}/{node_id}" if run_id else node_id
+        # Always use run_id in path (either provided or fetched)
+        upload_path = f"{run_id}/{node_id}"
         url = f"https://accounts.playbook3d.com/upload-assets/{upload_path}"
         
         headers = {
@@ -93,7 +104,7 @@ class Playbook_PhotonText2Image:
             "required": {
                 "luma_api_key": ("STRING", {"multiline": False}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
-                "aspect_ratio": ("STRING", {"default": "1:1"}),
+                "aspect_ratio": (["9:16", "3:4", "1:1", "4:3", "16:9", "21:9"],),
                 "save": ("BOOLEAN", {"default": True}),
             },
             "optional": {
